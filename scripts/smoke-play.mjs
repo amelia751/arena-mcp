@@ -4,7 +4,7 @@ import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-const BASE = process.argv[2] || "http://localhost:3080";
+const BASE = process.argv[2] || process.env.ARENA_BASE || "http://localhost:3000";
 const ENV = process.argv[3] || "env_connect_four";
 const OUT = path.join(process.cwd(), ".data", "smoke");
 mkdirSync(OUT, { recursive: true });
@@ -33,8 +33,11 @@ const call = (name, args) =>
     [name, args],
   );
 
+/** Tool answers are prose that may open with a JSON object. */
+const leadingJson = (text) => JSON.parse(String(text).split("\n")[0]);
+
 console.log("--- start_match ---");
-const started = JSON.parse(await call("start_match", { environment_id: ENV, agent_label: "smoke-agent" }));
+const started = leadingJson(await call("start_match", { environment_id: ENV, agent_label: "smoke-agent" }));
 console.log(started);
 const matchId = started.match_id;
 const humanSeat = started.human_seat;
@@ -62,7 +65,7 @@ for (let round = 1; round <= 6; round++) {
   s = await state();
   if (s.match.terminal) break;
   if (s.match.to_move === agentSeat) {
-    const view = JSON.parse(await call("get_observation", {}));
+    const view = leadingJson(await call("get_observation", {}));
     const choice = view.legal_actions[0];
     console.log(`[agent] take_action ${choice} at revision ${view.revision}`);
     const res = await call("take_action", {
@@ -82,12 +85,14 @@ console.log("\n--- inspect_view ---");
 console.log(await call("inspect_view", {}));
 
 console.log("\n--- export_episodes ---");
-const ep = JSON.parse(await call("export_episodes", {}));
-const lines = String(ep.jsonl || "").split("\n").filter(Boolean);
-console.log(`${lines.length} jsonl rows`);
+console.log(await call("export_episodes", {}));
+
+const jsonl = await (await fetch(`${BASE}/api/episodes?match_id=${matchId}&format=jsonl`)).text();
+const lines = jsonl.split("\n").filter(Boolean);
+console.log(`\n${lines.length} rows in the downloadable JSONL`);
 for (const l of lines) {
   const row = JSON.parse(l);
-  if (row.type === "episode") console.log(`episode ${row.match_id} seats=${JSON.stringify(row.seats.map((s) => s.interface))}`);
+  if (row.type === "episode") console.log(`episode ${row.match_id} seats=${JSON.stringify(row.seats.map((s) => s.interface))} returns=${JSON.stringify(row.returns)}`);
   else console.log(`  step ${row.index} seat=${row.seat} by=${row.interface} action=${row.action} r=${row.reward} conf=${row.confidence}`);
 }
 

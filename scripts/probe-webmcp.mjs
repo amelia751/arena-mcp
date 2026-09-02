@@ -1,6 +1,8 @@
 // Can Playwright drive a real document.modelContext surface?
 import { chromium } from "playwright";
 
+const BASE = process.argv[2] || process.env.ARENA_BASE || "http://localhost:3000";
+
 const ARGS = [
   "--enable-experimental-web-platform-features",
   "--enable-features=WebMCPTesting,DevToolsWebMCPSupport",
@@ -15,7 +17,7 @@ for (const channel of [undefined, "chrome"]) {
     continue;
   }
   const page = await browser.newPage();
-  await page.goto("http://localhost:3080/", { waitUntil: "networkidle" });
+  await page.goto(BASE, { waitUntil: "networkidle" });
   const info = await page.evaluate(async () => ({
     isSecureContext,
     tools: document.modelContext ? (await document.modelContext.getTools()).map((t) => t.name) : null,

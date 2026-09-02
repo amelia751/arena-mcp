@@ -31,7 +31,41 @@ export function VerifyPanel({
           {report.playouts.ms} ms
         </p>
       )}
+      <RenderCoverage coverage={report.render_coverage} />
       <FlowMatrix rows={report.info_flow} players={players} />
+    </div>
+  );
+}
+
+function RenderCoverage({ coverage }: { coverage: ValidationReport["render_coverage"] }) {
+  if (!coverage) return null;
+  const { painted, dark } = coverage;
+  if (!painted.length && !dark.length) return null;
+  return (
+    <div className="tape" style={{ marginTop: "1.4rem" }}>
+      <div className="tape-head">
+        <span>
+          What the table shows · {painted.length} of {painted.length + dark.length} fields
+        </span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>observation field</th>
+            <th>on screen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {painted.concat(dark).slice(0, 40).map((field) => (
+            <tr key={field}>
+              <td>{field}</td>
+              <td className={dark.includes(field) ? "hidden" : "own"}>
+                {dark.includes(field) ? "not drawn" : "drawn"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

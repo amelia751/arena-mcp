@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:view": "node scripts/smoke-view.mjs",
+    "check:play": "node scripts/smoke-play.mjs",
+    "check:sandbox": "node scripts/smoke-sandbox.mjs",
+    "check:webmcp": "node scripts/probe-webmcp.mjs",
+    "agent": "node scripts/agent-live.mjs"
   },
   "dependencies": {
     "@jitl/quickjs-singlefile-cjs-release-sync": "^0.32.0",

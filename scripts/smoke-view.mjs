@@ -4,7 +4,7 @@ import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-const BASE = process.argv[2] || "http://localhost:3080";
+const BASE = process.argv[2] || process.env.ARENA_BASE || "http://localhost:3000";
 const OUT = path.join(process.cwd(), ".data", "smoke");
 mkdirSync(OUT, { recursive: true });
 

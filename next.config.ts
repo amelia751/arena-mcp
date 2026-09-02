@@ -11,7 +11,6 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "Origin-Agent-Cluster", value: "?1" },
-          { key: "Permissions-Policy", value: "tools=(self)" },
         ],
       },
     ];

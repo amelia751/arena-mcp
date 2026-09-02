@@ -92,6 +92,10 @@ type MountOptions = {
   width?: number;
 };
 
+/** Preview and the live table lay out in the same box, so what the agent was
+ *  shown is what the person gets. */
+const MEASURE_WIDTH = 760;
+
 export function mountView(
   host: HTMLElement,
   view: AuthoredView,
@@ -103,7 +107,7 @@ export function mountView(
   frame.setAttribute("sandbox", "allow-scripts");
   frame.setAttribute("referrerpolicy", "no-referrer");
   frame.setAttribute("title", "Game table");
-  frame.style.cssText = `display:block;border:0;width:${opts.width ? `${opts.width}px` : "100%"};height:120px;overflow:hidden;color-scheme:light`;
+  frame.style.cssText = `display:block;border:0;width:${opts.width ?? MEASURE_WIDTH}px;height:120px;overflow:hidden;color-scheme:light`;
   frame.srcdoc = buildSrcdoc(view);
   host.appendChild(frame);
 
@@ -194,7 +198,7 @@ export async function snapshotOffscreen(
   host.style.cssText =
     "position:fixed;left:-10000px;top:0;width:760px;opacity:0;pointer-events:none;z-index:-1";
   document.body.appendChild(host);
-  const handle = mountView(host, view, { width: 760 });
+  const handle = mountView(host, view, { width: MEASURE_WIDTH });
   try {
     await new Promise((r) => setTimeout(r, 60));
     // Show it the way a player would see it, with illegal controls greyed out.

@@ -19,7 +19,7 @@ const arg = (name, fallback) => {
 };
 const flag = (name) => argv.includes(`--${name}`);
 
-const BASE = arg("base", "http://localhost:3080");
+const BASE = arg("base", process.env.ARENA_BASE || "http://localhost:3000");
 const TASK = arg("task", "connect4");
 const MAX_TURNS = Number(arg("turns", 24));
 const PROJECT = "your-project-id";

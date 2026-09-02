@@ -1,21 +1,19 @@
-export function EnvTabs({
-  id,
-  current,
-}: {
-  id: string;
-  current: "play" | "verify" | "spec";
-}) {
+export type EnvTab = "play" | "inspect" | "verify" | "spec";
+
+export function EnvTabs({ id, current }: { id: string; current: EnvTab }) {
+  const tabs: Array<[EnvTab, string, string]> = [
+    ["play", "Table", `/e/${id}`],
+    ["inspect", "Inspect", `/e/${id}/inspect`],
+    ["verify", "Report", `/e/${id}/verify`],
+    ["spec", "Spec", `/e/${id}/spec`],
+  ];
   return (
     <nav className="tabs">
-      <a className={current === "play" ? "on" : ""} href={`/e/${id}`}>
-        Table
-      </a>
-      <a className={current === "verify" ? "on" : ""} href={`/e/${id}/verify`}>
-        Report
-      </a>
-      <a className={current === "spec" ? "on" : ""} href={`/e/${id}/spec`}>
-        Spec
-      </a>
+      {tabs.map(([key, label, href]) => (
+        <a key={key} className={current === key ? "on" : ""} href={href}>
+          {label}
+        </a>
+      ))}
     </nav>
   );
 }

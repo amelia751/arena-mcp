@@ -66,6 +66,12 @@ around it:
 is the only way to see whether the markup follows the state. Problems that stop the table working
 are reported separately from cosmetic notes.
 
+A person gets the same thing on the **Inspect** tab of any game, published or not. It walks the
+game without starting a match: click the board to play a line forward, step back, deal a different
+seed, and read the observation each seat was handed beside the board it produced. Pinning a seat
+shows what that side can see while the other one moves — in a game with hidden cards the two views
+should not match, which is the V5 guarantee made visible rather than asserted.
+
 ## Checks
 
 Publishing runs V0–V8: the code runs, the same seed replays, the sandbox has no ambient authority,

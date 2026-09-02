@@ -1,7 +1,7 @@
 import type { Environment } from "@/lib/types";
 import { envTheme } from "@/lib/theme";
 import { EnvIcon } from "./EnvIcon";
-import { EnvTabs } from "./EnvTabs";
+import { EnvTabs, type EnvTab } from "./EnvTabs";
 
 export function EnvChrome({
   env,
@@ -9,7 +9,7 @@ export function EnvChrome({
   children,
 }: {
   env: Environment;
-  current: "play" | "verify" | "spec";
+  current: EnvTab;
   kicker?: string;
   children: React.ReactNode;
 }) {

@@ -15,6 +15,7 @@ export function GameView({
   matchId,
   moved,
   onAction,
+  live = true,
 }: {
   view: AuthoredView;
   legal: string[];
@@ -23,6 +24,8 @@ export function GameView({
   matchId: string | null;
   moved?: boolean;
   onAction?: (id: string) => void;
+  /** Only the board someone is actually playing answers inspect_view. */
+  live?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<ViewHandle | null>(null);
@@ -58,6 +61,7 @@ export function GameView({
   }, [legal, legalKey, disabled, moved, view]);
 
   useEffect(() => {
+    if (!live) return;
     registerLiveTable({
       environment_id: environmentId,
       match_id: matchId,
@@ -74,7 +78,7 @@ export function GameView({
       varied: () => variedRef.current,
     });
     return () => registerLiveTable(null);
-  }, [environmentId, matchId]);
+  }, [environmentId, matchId, live]);
 
   return <div ref={host} className="game-host" />;
 }

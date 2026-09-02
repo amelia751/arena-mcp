@@ -13,9 +13,14 @@ export function EnvCard({ env }: { env: Environment }) {
       </div>
       <div className="game-card-body">
         <p>{cardBlurb(env)}</p>
-        <a className="pill" href={`/e/${env.id}`}>
-          Play
-        </a>
+        <div className="card-actions">
+          <a className="pill" href={`/e/${env.id}`}>
+            Play
+          </a>
+          <a className="pill quiet" href={`/e/${env.id}/inspect`}>
+            Inspect
+          </a>
+        </div>
       </div>
     </article>
   );

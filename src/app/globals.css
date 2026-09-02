@@ -176,8 +176,32 @@ a {
   text-align: center;
 }
 
-.game-card-body .pill {
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
   margin-top: auto;
+  padding-top: 1rem;
+}
+
+.card-actions .pill {
+  flex: 1;
+  padding: 0 0.75rem;
+}
+
+.pill.quiet {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pill.quiet:hover {
+  color: var(--ink);
+}
+
+.pill.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
 }
 
 .pill {
@@ -459,6 +483,104 @@ td.hidden {
 
 .muted {
   color: var(--muted);
+}
+
+.inspect-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.3rem;
+}
+
+.seat-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.seat-pick .kicker {
+  margin: 0;
+}
+
+.inspect-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.6rem;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .inspect-split {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
+}
+
+.inspect-board {
+  min-width: 0;
+}
+
+.inspect-board .note {
+  margin-top: 0.9rem;
+  text-align: center;
+}
+
+.inspect-data {
+  min-width: 0;
+}
+
+.inspect-data .note {
+  margin-top: 0;
+}
+
+.inspect-data .kicker {
+  margin-top: 1.3rem;
+}
+
+.inspect-data .kicker:first-child {
+  margin-top: 0;
+}
+
+.shape {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.8rem;
+  font-size: 0.8125rem;
+}
+
+.shape th,
+.shape td {
+  text-align: left;
+  padding: 0.3rem 0.5rem 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.shape th {
+  font-weight: 700;
+  white-space: nowrap;
+  padding-right: 0.9rem;
+}
+
+.shape td {
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.legal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--faint);
+  font-size: 0.8125rem;
+}
+
+.legal-row .pill {
+  height: 2rem;
+  padding: 0 0.8rem;
+  font-size: 0.75rem;
 }
 
 h1 {

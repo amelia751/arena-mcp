@@ -54,11 +54,16 @@ function nextStep(state: {
   return "It is their move. Call wait_for_turn now — it blocks until they play and hands you the new position.";
 }
 
-/** Shortens the long strings and long lists inside a value. */
+/**
+ * Shortens the long strings and long lists inside a value. Ids, names and hashes
+ * are short and are the whole point of the answer, so nothing below the floor is
+ * ever touched however tight the budget gets.
+ */
+const KEEP_WHOLE = 64;
 function prune(value: unknown, budget: number, cap: number): unknown {
   if (typeof value === "string") {
-    if (value.length <= budget) return value;
-    return budget === 0 ? "[omitted]" : value.slice(0, budget) + "…";
+    const limit = Math.max(budget, KEEP_WHOLE);
+    return value.length <= limit ? value : value.slice(0, limit) + "…";
   }
   if (Array.isArray(value)) {
     const kept = value.slice(0, cap).map((v) => prune(v, budget, cap));
@@ -579,6 +584,7 @@ export function ArenaTools() {
                 signal,
               }),
             ),
+            2500,
           );
         },
       },

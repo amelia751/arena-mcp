@@ -13,6 +13,7 @@
     "check:refresh": "node scripts/smoke-refresh.mjs",
     "check:wait": "node scripts/smoke-wait.mjs",
     "check:tools": "node scripts/smoke-tools.mjs",
+    "check:answers": "node scripts/smoke-answers.mjs",
     "check:webmcp": "node scripts/probe-webmcp.mjs",
     "agent": "node scripts/agent-live.mjs"
   },

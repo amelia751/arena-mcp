@@ -42,3 +42,6 @@ next-env.d.ts
 
 # cursor rules
 /.cursor/rules/
+
+# planning notes
+/ROADMAP.md

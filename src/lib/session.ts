@@ -59,6 +59,25 @@ export function registerNavigator(fn: ((path: string) => void) | null) {
   navigate = fn;
 }
 
+let refresher: (() => Promise<void>) | null = null;
+
+export function registerRefresher(fn: (() => Promise<void>) | null) {
+  refresher = fn;
+}
+
+/**
+ * Anything the agent stores was rendered on the server, so the page the human is
+ * looking at will not show it until the route is re-fetched. Tools that write
+ * call this before they answer, and it resolves once the new markup is on screen
+ * — so a follow-up inspect_view reads the board that the person can actually see.
+ */
+export async function refreshView(): Promise<void> {
+  if (refresher) await refresher();
+  // The board's markup came from render() and lives in client state, so re-fetching
+  // the route alone would leave a rewritten table on screen looking like the old one.
+  await desk?.refresh().catch(() => null);
+}
+
 /** Move the human's page to an environment and wait for its board to mount. */
 export async function openEnvironment(id: string): Promise<DeskApi | null> {
   if (desk && desk.environment_id === id) return desk;

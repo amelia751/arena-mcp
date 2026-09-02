@@ -22,7 +22,7 @@ export function RevalidateButton({ id }: { id: string }) {
         router.refresh();
       }}
     >
-      {busy ? "Running checks…" : "Run V0–V6"}
+      {busy ? "Running checks…" : "Run V0–V8"}
     </button>
   );
 }

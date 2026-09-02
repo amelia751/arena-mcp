@@ -92,6 +92,10 @@ and every seat can see its own deal without `undefined` in it.
 | `wait_for_turn` | Bounded wait for the person to move |
 | `export_episodes` | What was recorded, plus a download link |
 
+The person and the agent share one page, so a tool that writes repaints the table before it
+answers. A draft the agent creates is on screen by the time it says so, and nothing here needs a
+reload to be seen.
+
 ## Dataset
 
 Each match is an `episode` header plus `step` rows:
@@ -115,6 +119,7 @@ npm run build && npm start          # the tools are registered on the running pa
 npm run check:view                  # what preview_view and inspect_view answer
 npm run check:play                  # a human click and an agent move in one match
 npm run check:sandbox               # markup that escapes the sanitizer stays contained
+npm run check:refresh               # what a tool writes is on screen without a reload
 
 npm run agent -- --task connect4    # a model authors a game and plays it, through the real tools
 ```

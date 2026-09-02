@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { snapshotDraft, snapshotLiveTable } from "@/lib/view-dom";
 import type { Projection } from "@/lib/view-project";
 import {
   currentDesk,
   openEnvironment,
+  refreshView,
   registerNavigator,
+  registerRefresher,
   waitForDesk,
 } from "@/lib/session";
 
@@ -22,6 +24,13 @@ async function api(path: string, init?: RequestInit) {
   } catch {
     return { error: text || res.statusText, status: res.status };
   }
+}
+
+/** Calls that store something repaint the person's page before the agent hears back. */
+async function writeApi(path: string, init?: RequestInit) {
+  const res = await api(path, init);
+  await refreshView();
+  return res;
 }
 
 /** Tools return enough for the agent to pick its own next move. */
@@ -97,11 +106,39 @@ const GUIDE_DESC =
 
 export function ArenaTools() {
   const router = useRouter();
+  const [repainting, startRepaint] = useTransition();
+  const repaintWaiters = useRef<Array<() => void>>([]);
+
+  useEffect(() => {
+    if (repainting || !repaintWaiters.current.length) return;
+    const done = repaintWaiters.current;
+    repaintWaiters.current = [];
+    for (const resolve of done) resolve();
+  }, [repainting]);
+
+  // Resolves on the edge where the refresh transition settles, so the tool answers
+  // against markup that has already painted rather than the markup it replaced.
+  const repaint = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        const give_up = setTimeout(resolve, 2000);
+        repaintWaiters.current.push(() => {
+          clearTimeout(give_up);
+          resolve();
+        });
+        startRepaint(() => router.refresh());
+      }),
+    [router],
+  );
 
   useEffect(() => {
     registerNavigator((path) => router.push(path));
-    return () => registerNavigator(null);
-  }, [router]);
+    registerRefresher(repaint);
+    return () => {
+      registerNavigator(null);
+      registerRefresher(null);
+    };
+  }, [router, repaint]);
 
   useEffect(() => {
     const model = document.modelContext ?? navigator.modelContext;
@@ -184,7 +221,10 @@ export function ArenaTools() {
         },
         annotations: { untrustedContentHint: true },
         execute: async (input) =>
-          clip(await api("/api/environments", { method: "POST", body: JSON.stringify(input) }), 3500),
+          clip(
+            await writeApi("/api/environments", { method: "POST", body: JSON.stringify(input) }),
+            3500,
+          ),
       },
       {
         name: "fork_environment",
@@ -202,7 +242,7 @@ export function ArenaTools() {
         annotations: { untrustedContentHint: true },
         execute: async ({ source_id, name }) =>
           clip(
-            await api(`/api/environments/${source_id}/fork`, {
+            await writeApi(`/api/environments/${source_id}/fork`, {
               method: "POST",
               body: JSON.stringify({ name }),
             }),
@@ -237,7 +277,10 @@ export function ArenaTools() {
         annotations: { untrustedContentHint: true },
         execute: async ({ id, ...rest }) =>
           clip(
-            await api(`/api/environments/${id}`, { method: "PATCH", body: JSON.stringify(rest) }),
+            await writeApi(`/api/environments/${id}`, {
+              method: "PATCH",
+              body: JSON.stringify(rest),
+            }),
             3500,
           ),
       },
@@ -254,10 +297,10 @@ export function ArenaTools() {
           required: ["id"],
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        annotations: { untrustedContentHint: true },
         execute: async ({ id, episodes }) =>
           clip(
-            await api(`/api/environments/${id}/validate`, {
+            await writeApi(`/api/environments/${id}/validate`, {
               method: "POST",
               body: JSON.stringify({ episodes }),
             }),
@@ -365,7 +408,12 @@ export function ArenaTools() {
         },
         annotations: { untrustedContentHint: true },
         execute: async ({ id, ...rest }) =>
-          clip(await api(`/api/environments/${id}/publish`, { method: "POST", body: JSON.stringify(rest) })),
+          clip(
+            await writeApi(`/api/environments/${id}/publish`, {
+              method: "POST",
+              body: JSON.stringify(rest),
+            }),
+          ),
       },
       {
         name: "open_environment",

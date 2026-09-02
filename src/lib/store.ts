@@ -10,7 +10,8 @@ export type DB = {
   steps: Record<string, StepRecord[]>;
 };
 
-const FILE = process.env.ARENA_DATA ?? path.join(process.cwd(), ".data", "store.json");
+const FILE = path.join(process.cwd(), ".data", "store.json");
+const SERVERLESS = !!(process.env.NETLIFY || process.env.VERCEL);
 
 let mem: DB | null = null;
 let memMtime = 0;
@@ -23,15 +24,19 @@ function empty(): DB {
 }
 
 async function load(): Promise<DB> {
+  if (SERVERLESS) {
+    if (!mem) mem = empty();
+    return mem;
+  }
   let mtime = 0;
   try {
-    mtime = (await stat(FILE)).mtimeMs;
+    mtime = (await stat(/*turbopackIgnore: true*/ FILE)).mtimeMs;
   } catch {
     mtime = 0;
   }
   if (mem && mtime && mtime === memMtime) return mem;
   try {
-    const raw = await readFile(FILE, "utf8");
+    const raw = await readFile(/*turbopackIgnore: true*/ FILE, "utf8");
     mem = JSON.parse(raw) as DB;
     memMtime = mtime;
     for (const e of referenceEnvironments()) {
@@ -46,12 +51,16 @@ async function load(): Promise<DB> {
 }
 
 async function persist(db: DB) {
+  if (SERVERLESS) {
+    mem = db;
+    return;
+  }
   await mkdir(path.dirname(FILE), { recursive: true });
   const tmp = FILE + ".tmp";
-  await writeFile(tmp, JSON.stringify(db), "utf8");
-  await rename(tmp, FILE);
+  await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(db), "utf8");
+  await rename(/*turbopackIgnore: true*/ tmp, FILE);
   try {
-    memMtime = (await stat(FILE)).mtimeMs;
+    memMtime = (await stat(/*turbopackIgnore: true*/ FILE)).mtimeMs;
   } catch {
     memMtime = Date.now();
   }

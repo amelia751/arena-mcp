@@ -2,9 +2,10 @@ export function json(data: unknown, status = 200) {
   return Response.json(data, { status });
 }
 
-export function fromResult<T extends { error?: string; status?: number }>(result: T) {
-  if (result && result.error) {
-    return json(result, result.status ?? 400);
+export function fromResult(result: unknown) {
+  if (result && typeof result === "object" && "error" in result) {
+    const row = result as { error?: string; status?: number };
+    if (row.error) return json(result, typeof row.status === "number" ? row.status : 400);
   }
   return json(result);
 }

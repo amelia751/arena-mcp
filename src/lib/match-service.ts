@@ -51,13 +51,13 @@ export async function startMatch(input: {
   const seats: Seat[] = [
     {
       seat: humanSeat,
-      player_type: "human",
-      interface: "human_ui",
+      player_type: "human" as const,
+      interface: "human_ui" as const,
     },
     {
       seat: 1 - humanSeat,
-      player_type: "agent",
-      interface: "webmcp",
+      player_type: "agent" as const,
+      interface: "webmcp" as const,
       agent_label: input.agent_label,
     },
   ].sort((a, b) => a.seat - b.seat);

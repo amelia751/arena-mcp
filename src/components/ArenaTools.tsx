@@ -54,10 +54,71 @@ function nextStep(state: {
   return "It is their move. Call wait_for_turn now — it blocks until they play and hands you the new position.";
 }
 
+/** Shortens the long strings and long lists inside a value. */
+function prune(value: unknown, budget: number, cap: number): unknown {
+  if (typeof value === "string") {
+    if (value.length <= budget) return value;
+    return budget === 0 ? "[omitted]" : value.slice(0, budget) + "…";
+  }
+  if (Array.isArray(value)) {
+    const kept = value.slice(0, cap).map((v) => prune(v, budget, cap));
+    return value.length > cap ? kept.concat([`… ${value.length - cap} more`]) : kept;
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = prune(v, budget, cap);
+    return out;
+  }
+  return value;
+}
+
+const size = (v: unknown) => (JSON.stringify(v) ?? "").length;
+
+/**
+ * Cutting a JSON string in half leaves something that will not parse, and the id
+ * an agent needs is usually past the cut. Prose can be sliced; a value gets shrunk
+ * — shorter strings, then shorter lists, then whole fields dropped — so whatever
+ * comes back is still JSON.
+ */
 function clip(value: unknown, max = 1800): string {
-  const s = typeof value === "string" ? value : JSON.stringify(value);
-  if (s.length <= max) return s;
-  return s.slice(0, max - 24) + "… [truncated — request a narrower field]";
+  if (typeof value === "string") {
+    return value.length <= max ? value : value.slice(0, max - 24) + "… [truncated]";
+  }
+  if (size(value) <= max) return JSON.stringify(value) ?? "";
+  for (const [budget, cap] of [
+    [600, 40],
+    [200, 12],
+    [0, 4],
+  ]) {
+    const shrunk = prune(value, budget, cap);
+    if (size(shrunk) <= max) return JSON.stringify(shrunk) ?? "";
+  }
+  // Still over budget because of its shape, so shed the biggest fields.
+  const small = prune(value, 0, 4);
+  if (small && typeof small === "object" && !Array.isArray(small)) {
+    const rec = small as Record<string, unknown>;
+    const dropped: string[] = [];
+    const heaviest = Object.keys(rec).sort((a, b) => size(rec[b]) - size(rec[a]));
+    for (const k of heaviest) {
+      if (size(rec) + size(dropped) + 20 <= max) break;
+      delete rec[k];
+      dropped.push(k);
+    }
+    if (dropped.length) rec.dropped_fields = dropped;
+    if (size(rec) <= max) return JSON.stringify(rec) ?? "";
+  }
+  return JSON.stringify({ error: "the answer was too large to show" });
+}
+
+/** The agent wrote the code, so echoing it back only crowds out the report. */
+function withoutCode(res: unknown): unknown {
+  if (!res || typeof res !== "object") return res;
+  const rec = res as Record<string, unknown>;
+  const env = rec.environment;
+  if (!env || typeof env !== "object") return res;
+  const rest = { ...(env as Record<string, unknown>) };
+  delete rest.code;
+  return { ...rec, environment: rest };
 }
 
 /** The view tools answer in prose, not JSON: the agent is reading a picture. */
@@ -238,11 +299,13 @@ export function ArenaTools() {
         annotations: { untrustedContentHint: true },
         execute: async (input, { signal }) =>
           clip(
-            await writeApi("/api/environments", {
-              method: "POST",
-              body: JSON.stringify(input),
-              signal,
-            }),
+            withoutCode(
+              await writeApi("/api/environments", {
+                method: "POST",
+                body: JSON.stringify(input),
+                signal,
+              }),
+            ),
             3500,
           ),
       },
@@ -263,11 +326,13 @@ export function ArenaTools() {
         annotations: { untrustedContentHint: true },
         execute: async ({ source_id, name }, { signal }) =>
           clip(
-            await writeApi(`/api/environments/${source_id}/fork`, {
-              method: "POST",
-              body: JSON.stringify({ name }),
-              signal,
-            }),
+            withoutCode(
+              await writeApi(`/api/environments/${source_id}/fork`, {
+                method: "POST",
+                body: JSON.stringify({ name }),
+                signal,
+              }),
+            ),
             2500,
           ),
       },
@@ -304,11 +369,13 @@ export function ArenaTools() {
         annotations: { untrustedContentHint: true },
         execute: async ({ id, ...rest }, { signal }) =>
           clip(
-            await writeApi(`/api/environments/${id}`, {
-              method: "PATCH",
-              body: JSON.stringify(rest),
-              signal,
-            }),
+            withoutCode(
+              await writeApi(`/api/environments/${id}`, {
+                method: "PATCH",
+                body: JSON.stringify(rest),
+                signal,
+              }),
+            ),
             3500,
           ),
       },
@@ -332,11 +399,13 @@ export function ArenaTools() {
         annotations: { untrustedContentHint: true },
         execute: async ({ id, episodes }, { signal }) =>
           clip(
-            await writeApi(`/api/environments/${id}/validate`, {
-              method: "POST",
-              body: JSON.stringify({ episodes }),
-              signal,
-            }),
+            withoutCode(
+              await writeApi(`/api/environments/${id}/validate`, {
+                method: "POST",
+                body: JSON.stringify({ episodes }),
+                signal,
+              }),
+            ),
             3500,
           ),
       },
@@ -503,11 +572,13 @@ export function ArenaTools() {
             }. A table nobody has looked at is not ready to publish.`;
           }
           return clip(
-            await writeApi(`/api/environments/${id}/publish`, {
-              method: "POST",
-              body: JSON.stringify(rest),
-              signal,
-            }),
+            withoutCode(
+              await writeApi(`/api/environments/${id}/publish`, {
+                method: "POST",
+                body: JSON.stringify(rest),
+                signal,
+              }),
+            ),
           );
         },
       },

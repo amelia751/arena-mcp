@@ -262,7 +262,7 @@ async function main() {
 
   // Stands in for the person at the table: reads the board, clicks a real
   // control in the live frame, and lets the click travel the whole path.
-  const human = { stop: false, moves: 0, seed: 7, task: null };
+  const human = { stop: false, moves: 0, total: 0, seed: 7, task: null };
   function pick(legal) {
     human.seed = (Math.imul(human.seed ^ (human.seed >>> 15), 2246822519) + 12345) >>> 0;
     const middle = legal.filter((a) => /_(2|3|4)$/.test(a));
@@ -284,6 +284,8 @@ async function main() {
       if (m.terminal) {
         log({ event: "human_done", matchId, rewards: m.rewards, moves: human.moves });
         console.log(`  [human] game over, rewards ${JSON.stringify(m.rewards)}`);
+        // The person is still sitting there: if the agent deals again, they play again.
+        human.task = null;
         return;
       }
       if (m.to_move !== humanSeat) continue;
@@ -297,6 +299,7 @@ async function main() {
         const control = page.frameLocator(".game-host iframe").locator(`[data-action="${choice}"]`);
         await control.click({ timeout: 4000 });
         human.moves++;
+        human.total++;
         console.log(`  [human] clicked ${choice} in the live table`);
         log({ event: "human_move", matchId, action: choice, legal });
         await page.waitForTimeout(500);
@@ -316,7 +319,15 @@ async function main() {
 
   const task = TASKS[TASK] || TASK;
   const contents = [{ role: "user", parts: [{ text: task }] }];
-  const seen = { created: null, published: false, matchId: null, moves: 0, previews: 0 };
+  const seen = {
+    created: null,
+    published: false,
+    matchId: null,
+    moves: 0,
+    previews: 0,
+    terminal: false,
+    exported: false,
+  };
   const toolErrors = [];
   let nudges = 0;
   let stalled = 0;
@@ -379,7 +390,10 @@ async function main() {
       // applies while it is still writing the game, not only once a match is live:
       // a turn the model declines to answer is the cheapest thing to recover from.
       const recited = candidate?.finishReason === "RECITATION";
-      const live = !/\bDONE\b/.test(text) && nudges < 4;
+      // Nudging past a finished, exported game only talks it into dealing another
+      // one, which is not what is being measured.
+      const finished = seen.published && seen.terminal && seen.exported;
+      const live = !finished && !/\bDONE\b/.test(text) && nudges < 4;
       log({
         event: live ? "nudge" : "stop",
         turn,
@@ -439,6 +453,8 @@ async function main() {
       if (name === "start_match" && !isError) {
         const started = leadingJson(flat);
         seen.matchId = started?.match_id ?? seen.matchId;
+        seen.terminal = false;
+        human.moves = 0;
         if (seen.matchId && !human.task) {
           human.task = humanLoop(seen.matchId, started?.human_seat ?? 0).catch((e) =>
             log({ event: "human_crash", message: e.message }),
@@ -465,6 +481,8 @@ async function main() {
         seen.moves++;
         await shot(`t${turn}-move${seen.moves}`);
       }
+      if (name === "export_episodes" && !isError) seen.exported = true;
+      if (/"terminal"\s*:\s*true/.test(flat)) seen.terminal = true;
 
       responses.push({
         functionResponse: {
@@ -498,7 +516,7 @@ async function main() {
   const finalShot = await shot("final");
   const summary = {
     ...seen,
-    humanMoves: human.moves,
+    humanMoves: human.total,
     trajectoryRows: episodes?.rows ?? 0,
     toolErrors: toolErrors.length,
     pageErrors: pageEvents.length,

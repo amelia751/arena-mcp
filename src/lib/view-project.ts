@@ -41,6 +41,8 @@ export function project(options?: ProjectOptions): Projection {
     el: Element;
     r: DOMRect;
     text: string;
+    /** What a person can actually read on it, ignoring anything only a screen reader hears. */
+    shown: string;
     name: string;
     action: string | null;
     paint: string | null;
@@ -103,6 +105,23 @@ export function project(options?: ProjectOptions): Projection {
     return null;
   }
 
+  /** A ::before/::after can be the whole visible mark on a control, and it is in no child list. */
+  function pseudoPaints(el: Element): boolean {
+    for (const which of ["::before", "::after"]) {
+      const cs = getComputedStyle(el, which);
+      const content = cs.content;
+      if (!content || content === "none" || content === "normal") continue;
+      if (content !== '""' && content !== "''") return true;
+      if (cs.backgroundImage && cs.backgroundImage !== "none") return true;
+      const bg = parseColor(cs.backgroundColor);
+      if (bg && bg.a > 0.05) return true;
+      for (const side of ["borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"]) {
+        if (parseFloat((cs as unknown as Record<string, string>)[side]) > 0) return true;
+      }
+    }
+    return false;
+  }
+
   function luminance(c: { r: number; g: number; b: number }): number {
     const f = (v: number) => {
       const s = v / 255;
@@ -134,6 +153,7 @@ export function project(options?: ProjectOptions): Projection {
       el,
       r,
       text: ownText(el),
+      shown: squash(el.textContent || ""),
       name: squash(el.getAttribute("aria-label") || el.textContent || ""),
       action: el.getAttribute("data-action"),
       paint: paintOf(el),
@@ -264,7 +284,9 @@ export function project(options?: ProjectOptions): Projection {
     if (!current.length) return;
     const parts = current.map((n) => {
       if (n.action) {
-        const label = n.name || n.text || n.action;
+        // An aria-label paints nothing, so crediting it here would describe a
+        // button the person cannot actually read.
+        const label = n.shown || (pseudoPaints(n.el) ? "(mark, no words)" : "(blank)");
         return `[${label}${n.disabled ? " (disabled)" : ""} -> ${n.action}]`;
       }
       if (n.text) return n.text;
@@ -290,8 +312,12 @@ export function project(options?: ProjectOptions): Projection {
   // --- controls and their problems ----------------------------------------
   const controls: Control[] = [];
   const seen: Record<string, boolean> = {};
+  const blanks: Node[] = [];
   for (const n of nodes) {
     if (!n.action) continue;
+    // Cells of a board are meant to be empty until something is played. A control
+    // standing on its own is not — if it shows nothing, it reads as a grey box.
+    if (!n.shown && n.leaf && !claimed.has(n.el) && !pseudoPaints(n.el)) blanks.push(n);
     controls.push({
       action: n.action,
       name: n.name || "",
@@ -315,6 +341,34 @@ export function project(options?: ProjectOptions): Projection {
   }
   if (!controls.length) {
     problems.push('nothing painted a data-action. Put data-action="<legal id>" on clickable elements.');
+  }
+  if (blanks.length) {
+    // Colour can stand in for a label — but only while the controls differ.
+    const alike: Record<string, Node[]> = {};
+    for (const n of blanks) {
+      const key = (n.paint || "none") + " " + Math.round(n.r.width) + "x" + Math.round(n.r.height);
+      (alike[key] = alike[key] || []).push(n);
+    }
+    const worst = Object.keys(alike).sort((a, b) => alike[b].length - alike[a].length)[0];
+    const group = alike[worst];
+    const hint = blanks.some((n) => n.name)
+      ? "an aria-label paints nothing — put the words inside the button as well"
+      : "give each one text a person can read";
+    const ids = group.map((n) => n.action).join(", ");
+    const swatch = group[0].paint;
+    if (group.length > 1) {
+      problems.push(
+        swatch
+          ? `${group.length} controls show no text (${ids}) — a person sees ${group.length} identical ${swatch} boxes and cannot tell them apart: ${hint}`
+          : `${group.length} controls paint nothing at all (${ids}) — no text and no background, so a person cannot see there is anything to click: ${hint}`,
+      );
+    } else {
+      notes.push(
+        swatch
+          ? `${ids} shows no text a person can read: ${hint}`
+          : `${ids} paints nothing at all — no text and no background: ${hint}`,
+      );
+    }
   }
   for (const id of legal) {
     if (!seen[id]) problems.push(`legal action "${id}" has no data-action in the markup`);

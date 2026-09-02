@@ -89,6 +89,36 @@ for (const [what, args, expected] of [
     { html: card(), css: `${base}.hand{display:flex;gap:6px;flex-wrap:wrap}` },
     null,
   ],
+  [
+    "buttons labelled only for a screen reader",
+    {
+      html: `<div class="row">${[0, 1, 2, 3]
+        .map((i) => `<button data-action="col_${i}" aria-label="Column ${i + 1}"></button>`)
+        .join("")}</div>`,
+      css: `.row{display:flex;gap:6px}button{width:50px;height:30px;background:#ddd}`,
+    },
+    /identical/,
+  ],
+  [
+    "the same buttons with the words painted on",
+    {
+      html: `<div class="row">${[0, 1, 2, 3]
+        .map((i) => `<button data-action="col_${i}">Column ${i + 1}</button>`)
+        .join("")}</div>`,
+      css: `.row{display:flex;gap:6px}button{width:90px;height:30px;background:#ddd;color:#111}`,
+    },
+    null,
+  ],
+  [
+    "blank controls that colour tells apart",
+    {
+      html: `<div class="row"><button data-action="red" aria-label="Red"></button>
+        <button data-action="blue" aria-label="Blue"></button></div>`,
+      css: `.row{display:flex;gap:6px}button{width:50px;height:30px}
+        [data-action=red]{background:#c00}[data-action=blue]{background:#00c}`,
+    },
+    null,
+  ],
 ]) {
   const out = await call("preview_view", args);
   const flagged = expected ? expected.test(out) : /^ok: true/.test(out);

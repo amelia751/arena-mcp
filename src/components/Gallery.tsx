@@ -71,12 +71,6 @@ export function Gallery() {
           <li>
             <BlankCard />
           </li>
-          <li>
-            <BlankCard />
-          </li>
-          <li>
-            <BlankCard />
-          </li>
         </ul>
       </section>
     );

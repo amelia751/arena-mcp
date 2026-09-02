@@ -11,7 +11,12 @@ export type DB = {
 };
 
 const FILE = path.join(process.cwd(), ".data", "store.json");
-const SERVERLESS = !!(process.env.NETLIFY || process.env.VERCEL);
+const SERVERLESS = !!(
+  process.env.NETLIFY ||
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT
+);
 
 let mem: DB | null = null;
 let memMtime = 0;
@@ -51,18 +56,16 @@ async function load(): Promise<DB> {
 }
 
 async function persist(db: DB) {
-  if (SERVERLESS) {
-    mem = db;
-    return;
-  }
-  await mkdir(path.dirname(FILE), { recursive: true });
-  const tmp = FILE + ".tmp";
-  await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(db), "utf8");
-  await rename(/*turbopackIgnore: true*/ tmp, FILE);
+  mem = db;
+  if (SERVERLESS) return;
   try {
+    await mkdir(path.dirname(FILE), { recursive: true });
+    const tmp = FILE + ".tmp";
+    await writeFile(/*turbopackIgnore: true*/ tmp, JSON.stringify(db), "utf8");
+    await rename(/*turbopackIgnore: true*/ tmp, FILE);
     memMtime = (await stat(/*turbopackIgnore: true*/ FILE)).mtimeMs;
   } catch {
-    memMtime = Date.now();
+    // Read-only hosts fall back to process memory.
   }
 }
 

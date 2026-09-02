@@ -9,16 +9,19 @@ export default async function Home() {
   if (games.length === 0) {
     return (
       <main>
-        <section className="blank">
-          <h1>Nothing here yet.</h1>
-          <p>
-            This page has no games of its own. Every table on it gets written from scratch by an
-            agent working alongside you — the rules, the board, and the way it looks.
-          </p>
-          <p className="blank-hint">
-            Open this page in a browser that speaks to your assistant, then ask it to design
-            something and play you.
-          </p>
+        <section className="gallery">
+          <p className="blank-line">Nothing here yet.</p>
+          <ul className="card-grid">
+            <li>
+              <BlankCard />
+            </li>
+            <li>
+              <BlankCard />
+            </li>
+            <li>
+              <BlankCard />
+            </li>
+          </ul>
         </section>
       </main>
     );
@@ -37,5 +40,25 @@ export default async function Home() {
         </ul>
       </section>
     </main>
+  );
+}
+
+function BlankCard() {
+  return (
+    <article className="game-card game-card-blank" aria-hidden="true">
+      <div className="game-card-top">
+        <svg
+          className="env-icon"
+          viewBox="0 0 48 48"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        >
+          <rect x="10" y="10" width="28" height="28" rx="6" />
+        </svg>
+      </div>
+      <div className="game-card-body" />
+    </article>
   );
 }

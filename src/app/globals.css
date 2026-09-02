@@ -94,30 +94,26 @@ a {
   margin-top: 2rem;
 }
 
-.blank {
-  max-width: 34rem;
-  padding: 3.5rem 0 0;
-}
-
-.blank h1 {
-  font-family: var(--font-cheltenham), Georgia, "Times New Roman", serif;
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 1rem;
-  color: var(--ink);
-}
-
-.blank p {
-  margin: 0 0 1rem;
-  font-size: 1.05rem;
-  line-height: 1.6;
-  color: var(--ink);
-}
-
-.blank-hint {
+.blank-line {
+  margin: 0 0 0.85rem;
+  font-size: 0.875rem;
   color: var(--muted);
-  font-size: 0.95rem !important;
+}
+
+.game-card-blank {
+  pointer-events: none;
+}
+
+.game-card-blank .game-card-top {
+  background: #f3f3f1;
+}
+
+.game-card-blank .env-icon {
+  color: #c8c8c4;
+}
+
+.game-card-blank .game-card-body {
+  min-height: 6.5rem;
 }
 
 .game-card {

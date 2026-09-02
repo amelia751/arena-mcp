@@ -91,6 +91,20 @@ function __perturb(v) {
   if (v == null) return 1;
   return "__PERTURBED__";
 }
+// Type-preserving, so render() sees a plausible alternative value rather than
+// a shape it was never written to handle.
+function __nudge(v) {
+  if (typeof v === "number") return v === 0 ? 1 : 0;
+  if (typeof v === "string") return v === "" ? "x" : v.charAt(0) === "z" ? "a" : "z";
+  if (typeof v === "boolean") return !v;
+  if (v === null) return 0;
+  return undefined;
+}
+function __empty(v) {
+  if (Array.isArray(v)) return v.length === 0;
+  if (v && typeof v === "object") return Object.keys(v).length === 0;
+  return false;
+}
 function __one(seed, policy_seed, max_steps, collect) {
   var state = init(seed);
   if (state == null || typeof state !== "object") return { error: "init must return an object", fn: "init" };
@@ -198,6 +212,47 @@ globalThis.__illegal = function (j) {
   } catch (e) {
     return JSON.stringify({ accepted: false, error: String(e && e.message || e), legal: legal });
   }
+};
+// For every field in the observation, change it and see whether render() paints
+// anything different. A field that never changes the markup is invisible to the
+// person at the table.
+globalThis.__render_coverage = function (j) {
+  var a = JSON.parse(j);
+  var state = init(a.seed || 0);
+  var cursor = a.policy_seed || 1;
+  var depth = a.depth || 0;
+  for (var d = 0; d < depth; d++) {
+    var legal;
+    try { legal = legal_actions(state, state.to_move); } catch (e) { break; }
+    if (!legal || !legal.length) break;
+    var r;
+    try { r = step(state, legal[Math.floor(rng(cursor++) * legal.length)]); } catch (e) { break; }
+    state = r.state;
+    if (r.terminal) break;
+  }
+  var seat = typeof state.to_move === "number" ? state.to_move : 0;
+  var obs;
+  try { obs = observe(state, seat); }
+  catch (e) { return JSON.stringify({ error: String(e && e.message || e), fn: "observe" }); }
+  var base;
+  try { base = __hash(render(obs)); }
+  catch (e) { return JSON.stringify({ error: String(e && e.message || e), fn: "render" }); }
+  var fields = [];
+  __fields(obs, "", fields);
+  var painted = [], dark = [], skipped = [];
+  for (var i = 0; i < fields.length && i < 120; i++) {
+    var f = fields[i];
+    var value = __get(obs, f);
+    if (__empty(value)) { skipped.push(f); continue; }
+    var alt = __nudge(value);
+    if (alt === undefined) { skipped.push(f); continue; }
+    var copy = __clone(obs);
+    __set(copy, f, alt);
+    var h;
+    try { h = __hash(render(copy)); } catch (e) { h = base; }
+    if (h !== base) painted.push(f); else dark.push(f);
+  }
+  return JSON.stringify({ seat: seat, painted: painted, dark: dark, skipped: skipped });
 };
 globalThis.__info_flow = function (j) {
   var a = JSON.parse(j);

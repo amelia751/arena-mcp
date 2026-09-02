@@ -33,6 +33,7 @@ function publicEnv(env: Environment) {
           checks: env.validation.checks,
           info_flow: env.validation.info_flow,
           playouts: env.validation.playouts,
+          render_coverage: env.validation.render_coverage,
         }
       : null,
     created_at: env.created_at,
@@ -44,12 +45,32 @@ export function getAuthoringGuide() {
   return { guide: AUTHORING_GUIDE, example_id: "env_tictactoe" };
 }
 
-export async function previewEnv(id: string, seed = 0, seat = 0) {
+export async function previewEnv(
+  id: string,
+  opts: { seed?: number; seat?: number; moves?: string[] } = {},
+) {
   const env = await getEnvironment(id);
   if (!env) return { error: "environment not found", status: 404 as const };
+  const seed = opts.seed ?? 0;
+  const moves = opts.moves ?? [];
   try {
     return await withRealm(env.code, (realm) => {
-      const state = realm.call("__init", { seed });
+      let state = realm.call("__init", { seed });
+      const played: string[] = [];
+      for (const action of moves) {
+        const stepped = realm.call<{ state: unknown; terminal: boolean }>("__step", {
+          state,
+          action,
+        });
+        state = stepped.state;
+        played.push(action);
+        if (stepped.terminal) break;
+      }
+      const toMove =
+        state && typeof state === "object" && typeof (state as { to_move?: number }).to_move === "number"
+          ? (state as { to_move: number }).to_move
+          : 0;
+      const seat = opts.seat ?? toMove;
       const observation = realm.call("__observe", { state, player: seat });
       const legal = realm.call<string[]>("__legal", { state, player: seat });
       const rendered = realm.call("__render", { observation });
@@ -60,6 +81,7 @@ export async function previewEnv(id: string, seed = 0, seat = 0) {
           environment_id: env.id,
           seed,
           seat,
+          moves: played,
           observation,
           legal_actions: legal,
           view: clean.view,
@@ -236,11 +258,23 @@ export async function publishEnv(input: {
       status: 400 as const,
     };
   }
+  const asymmetric = validation.info_flow.filter(
+    (row) => new Set(row.seats).size > 1,
+  );
+  const confirmed = input.confirm_info_flow === true || env.confirmed_info_flow;
+  if (asymmetric.length && !confirmed) {
+    return {
+      error:
+        "publish blocked — this game hides information from at least one seat, so the information-flow matrix has to be confirmed. Read the rows below and re-publish with confirm_info_flow: true if each one is correct.",
+      info_flow: asymmetric,
+      status: 409 as const,
+    };
+  }
   const next: Environment = {
     ...env,
     validation,
     published: true,
-    confirmed_info_flow: input.confirm_info_flow || env.confirmed_info_flow || true,
+    confirmed_info_flow: confirmed,
     updated_at: now(),
   };
   await putEnvironment(next);

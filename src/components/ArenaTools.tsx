@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { snapshotDraft, snapshotLiveTable } from "@/lib/view-dom";
-
-const GUIDE =
-  "Return the five-function contract, HTML/CSS render rules, preview_view / inspect_view loop, and a complete Tic-Tac-Toe example. Call this before writing any code.";
+import type { Projection } from "@/lib/view-project";
+import {
+  currentDesk,
+  openEnvironment,
+  registerNavigator,
+  waitForDesk,
+} from "@/lib/session";
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, {
@@ -25,16 +30,68 @@ function clip(value: unknown, max = 1800): string {
   return s.slice(0, max - 24) + "… [truncated — request a narrower field]";
 }
 
-function ctx() {
-  return document.modelContext ?? navigator.modelContext;
+/** The view tools answer in prose, not JSON: the agent is reading a picture. */
+function renderProjection(
+  snap: Projection,
+  extra?: { legal?: string[] | null; where?: string },
+): string {
+  const out: string[] = [];
+  out.push(snap.problems.length ? "ok: false" : "ok: true");
+  if (extra?.where) out.push(`showing: ${extra.where}`);
+  out.push(`size: ${snap.size.width}x${snap.size.height}px`);
+  out.push("");
+  out.push("what painted:");
+  out.push(snap.picture);
+  out.push("");
+  if (snap.controls.length) {
+    const enabled = snap.controls.filter((c) => c.enabled).length;
+    out.push(
+      `controls (${snap.controls.length}, ${enabled} enabled): ` +
+        snap.controls
+          .slice(0, 16)
+          .map((c) => `${c.action}${c.enabled ? "" : "*"}`)
+          .join(" ") +
+        (snap.controls.length > 16 ? " …" : ""),
+    );
+  } else {
+    out.push("controls: none");
+  }
+  if (extra?.legal?.length) out.push(`legal now: ${extra.legal.join(" ")}`);
+  if (snap.problems.length) {
+    out.push("");
+    out.push("problems — the table does not work until these are fixed:");
+    for (const w of snap.problems) out.push(`  - ${w}`);
+  }
+  if (snap.notes.length) {
+    out.push("");
+    out.push("notes — cosmetic, fix if you can but they do not block play:");
+    for (const w of snap.notes) out.push(`  - ${w}`);
+  }
+  if (!snap.problems.length) {
+    out.push("");
+    out.push("The table works. Move on when you are happy with how it looks.");
+  }
+  return out.join("\n");
 }
 
+const GUIDE_DESC =
+  "The five-function contract, how to write render() as HTML+CSS, the look-and-fix loop with preview_view, and a complete worked example. Call this before writing any code.";
+
 export function ArenaTools() {
+  const router = useRouter();
+
   useEffect(() => {
-    const model = ctx();
+    registerNavigator((path) => router.push(path));
+    return () => registerNavigator(null);
+  }, [router]);
+
+  useEffect(() => {
+    const model = document.modelContext ?? navigator.modelContext;
     if (!model?.registerTool) return;
     const controller = new AbortController();
     const { signal } = controller;
+
+    const deskMatch = () => currentDesk()?.match() ?? null;
 
     const tools: Array<{
       name: string;
@@ -45,15 +102,18 @@ export function ArenaTools() {
     }> = [
       {
         name: "get_authoring_guide",
-        description: GUIDE,
+        description: GUIDE_DESC,
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true },
-        execute: async () => clip(await api("/api/guide"), 8000),
+        execute: async () => {
+          const res = await api("/api/guide");
+          return typeof res.guide === "string" ? res.guide : clip(res, 9000);
+        },
       },
       {
         name: "list_environments",
         description:
-          "List authored environments, plus hidden templates you may fork (env_tictactoe, env_connect_four, env_kuhn). Templates are patterns, not published products.",
+          "List environments authored on this page, plus fork templates (env_tictactoe, env_connect_four, env_kuhn) that exist as patterns to copy.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async () => clip(await api("/api/environments")),
@@ -61,7 +121,7 @@ export function ArenaTools() {
       {
         name: "get_environment",
         description:
-          "Get one environment. Pass fn to fetch a single function body (init, legal_actions, observe, step, render).",
+          "Read one environment. Pass fn to fetch a single function body (init, legal_actions, observe, step, render) instead of all five.",
         inputSchema: {
           type: "object",
           properties: {
@@ -83,7 +143,7 @@ export function ArenaTools() {
       {
         name: "create_environment",
         description:
-          "Create an environment. code may be partial — send the functions you have. Validation runs automatically.",
+          "Create an environment. code may be partial — send the functions you have and build up. Validation runs immediately and comes back with the result.",
         inputSchema: {
           type: "object",
           properties: {
@@ -105,18 +165,12 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         execute: async (input) =>
-          clip(
-            await api("/api/environments", {
-              method: "POST",
-              body: JSON.stringify(input),
-            }),
-            3500,
-          ),
+          clip(await api("/api/environments", { method: "POST", body: JSON.stringify(input) }), 3500),
       },
       {
         name: "fork_environment",
         description:
-          "Copy a validated environment as a draft. Prefer this over writing Connect Four from a blank page — fork env_tictactoe or env_connect_four.",
+          "Copy an existing environment into a new draft you can edit. A good starting point when the new game shares a shape with one that already works.",
         inputSchema: {
           type: "object",
           properties: {
@@ -138,7 +192,7 @@ export function ArenaTools() {
       {
         name: "update_environment",
         description:
-          "Patch one or more functions. Requires expected_revision from the last create/update. Published environments cannot be edited — fork first.",
+          "Patch one or more functions on a draft. Takes expected_revision from the last create or update. Published environments are immutable; fork them instead.",
         inputSchema: {
           type: "object",
           properties: {
@@ -162,22 +216,19 @@ export function ArenaTools() {
         },
         execute: async ({ id, ...rest }) =>
           clip(
-            await api(`/api/environments/${id}`, {
-              method: "PATCH",
-              body: JSON.stringify(rest),
-            }),
+            await api(`/api/environments/${id}`, { method: "PATCH", body: JSON.stringify(rest) }),
             3500,
           ),
       },
       {
         name: "validate_environment",
         description:
-          "Run V0–V6 plus random playouts. Failures are written as repair instructions. Call this after every edit.",
+          "Run every check — it runs, it replays, it rejects illegal moves, it ends, it does not leak another seat's cards, and render paints the observation. Failures come back as repair instructions.",
         inputSchema: {
           type: "object",
           properties: {
             id: { type: "string" },
-            episodes: { type: "integer", description: "Playout count. Default 300." },
+            episodes: { type: "integer", description: "Random playouts to run. Default 300." },
           },
           required: ["id"],
           additionalProperties: false,
@@ -193,9 +244,78 @@ export function ArenaTools() {
           ),
       },
       {
+        name: "preview_view",
+        description:
+          "Look at the table. Mounts markup and describes what actually painted — the board as a character grid with real colours, every control and its size, and any layout problem. Pass html+css to try a draft, or environment_id to see the saved render(). Call this after every markup change.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            html: { type: "string", description: "Draft markup. Clickable nodes need data-action." },
+            css: { type: "string", description: "Draft stylesheet. No url() or @import." },
+            environment_id: { type: "string", description: "Run this environment's saved render()." },
+            seed: { type: "integer" },
+            moves: {
+              type: "array",
+              items: { type: "string" },
+              description: "Actions to play first, so you can see a board mid-game rather than empty.",
+            },
+            seat: { type: "integer", description: "Whose view to render. Default the seat to move." },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: async ({ html, css, environment_id, seed, moves, seat }) => {
+          let view = {
+            html: typeof html === "string" ? html : "",
+            css: typeof css === "string" ? css : "",
+          };
+          let legal: string[] | undefined;
+          let where = "draft markup";
+          if (environment_id && !view.html) {
+            const q = new URLSearchParams();
+            if (seed != null) q.set("seed", String(seed));
+            if (seat != null) q.set("seat", String(seat));
+            if (Array.isArray(moves) && moves.length) q.set("moves", moves.join(","));
+            const res = await api(`/api/environments/${environment_id}/view?${q}`);
+            if (res.error) return clip(res);
+            if (res.view) view = res.view;
+            legal = res.legal_actions;
+            where = `${environment_id} render() at seat ${res.seat}${
+              Array.isArray(moves) && moves.length ? ` after ${moves.join(", ")}` : ""
+            }`;
+            if (!view.html) return clip(res, 2500);
+          }
+          if (!view.html) {
+            return "Pass html (with css), or environment_id to render a saved environment. Clickable elements need data-action matching a legal action id.";
+          }
+          const playedMoves = Array.isArray(moves) ? moves.length : 0;
+          const snap = await snapshotDraft(view, { legal, varied: playedMoves > 0 });
+          return clip(renderProjection(snap, { legal, where }), 2600);
+        },
+      },
+      {
+        name: "inspect_view",
+        description:
+          "Look at the live table the person is playing on right now — same description as preview_view, but of the real board rather than a draft. Use it to check the board matches the position after a move.",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: async () => {
+          const snap = await snapshotLiveTable();
+          if (!snap) {
+            return "No table is on screen. Call open_environment or start_match first, or use preview_view to look at a draft.";
+          }
+          return clip(
+            renderProjection(snap, {
+              where: `live table for ${snap.environment_id}${snap.match_id ? ` (match ${snap.match_id})` : ""}`,
+            }),
+            2600,
+          );
+        },
+      },
+      {
         name: "describe_dataset",
         description:
-          "Trajectory schema specialised to this environment, plus one real sample row from a playout.",
+          "The trajectory schema for this environment — observation fields, action space, reward range — plus one real sample row from a playout.",
         inputSchema: {
           type: "object",
           properties: { id: { type: "string" } },
@@ -208,89 +328,176 @@ export function ArenaTools() {
       {
         name: "publish_environment",
         description:
-          "Publish only if V0–V6 pass. Mints a shareable /e/{id} URL. Requires expected_revision.",
+          "Publish an environment once every check passes, which mints its shareable page. Takes expected_revision.",
         inputSchema: {
           type: "object",
           properties: {
             id: { type: "string" },
             expected_revision: { type: "integer" },
-            confirm_info_flow: { type: "boolean" },
+            confirm_info_flow: {
+              type: "boolean",
+              description: "Confirm the information-flow matrix reads correctly for this game.",
+            },
           },
           required: ["id", "expected_revision"],
           additionalProperties: false,
         },
         execute: async ({ id, ...rest }) =>
-          clip(
-            await api(`/api/environments/${id}/publish`, {
-              method: "POST",
-              body: JSON.stringify(rest),
-            }),
-          ),
+          clip(await api(`/api/environments/${id}/publish`, { method: "POST", body: JSON.stringify(rest) })),
+      },
+      {
+        name: "open_environment",
+        description:
+          "Put an environment's table on the person's screen and describe what they can now see. Do this before starting a match so you are both looking at the same board.",
+        inputSchema: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+          additionalProperties: false,
+        },
+        execute: async ({ id }) => {
+          const desk = await openEnvironment(String(id));
+          if (!desk) return `Opened /e/${id}, but its table has not mounted yet. Call inspect_view in a moment.`;
+          const snap = await snapshotLiveTable();
+          const head = `Opened /e/${id} on the person's screen.`;
+          if (!snap) return `${head} No board is dealt yet — call start_match to deal one.`;
+          return clip(`${head}\n\n${renderProjection(snap, { where: `live table for ${id}` })}`, 2600);
+        },
       },
       {
         name: "start_match",
-        description: "Start a match. Human is seat 0 in the UI; you are seat 1 unless you pass seat.",
+        description:
+          "Deal a match on the person's screen and take a seat opposite them. Returns your observation and what they can see. The board they click is the board you are playing.",
         inputSchema: {
           type: "object",
           properties: {
             environment_id: { type: "string" },
-            seat: { type: "integer" },
-            agent_label: { type: "string" },
+            human_seat: { type: "integer", description: "Seat the person plays. Default 0." },
+            agent_label: { type: "string", description: "How you want to be named in the dataset." },
           },
           required: ["environment_id"],
           additionalProperties: false,
         },
-        execute: async (input) =>
-          clip(
-            await api("/api/matches", { method: "POST", body: JSON.stringify(input) }),
-          ),
+        execute: async ({ environment_id, human_seat, agent_label }) => {
+          const desk = await openEnvironment(String(environment_id));
+          if (!desk) {
+            const res = await api("/api/matches", {
+              method: "POST",
+              body: JSON.stringify({ environment_id, seat: human_seat ?? 0, agent_label }),
+            });
+            return clip({ ...res, note: "Started headless — the person's page is not on this environment." }, 2000);
+          }
+          desk.setOpponent("agent");
+          const session = await desk.start({
+            seat: typeof human_seat === "number" ? human_seat : 0,
+            agent_label: agent_label ? String(agent_label) : undefined,
+          });
+          const obs = await api(
+            `/api/matches/${session.match_id}/observation?seat=${session.agent_seat}`,
+          );
+          return clip(
+            {
+              match_id: session.match_id,
+              your_seat: session.agent_seat,
+              human_seat: session.human_seat,
+              revision: obs.revision,
+              to_move: obs.to_move,
+              your_turn: obs.to_move === session.agent_seat,
+              observation: obs.observation,
+              legal_actions: obs.legal_actions,
+            },
+            2200,
+          );
+        },
       },
       {
         name: "get_observation",
-        description: "Your seat's observation, legal actions, revision, and phase.",
+        description:
+          "Your view of the current position, the actions you may legally take, and the revision to quote when you move. Defaults to the match on screen.",
         inputSchema: {
           type: "object",
           properties: {
             match_id: { type: "string" },
             seat: { type: "integer" },
           },
-          required: ["match_id"],
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true },
         execute: async ({ match_id, seat }) => {
-          const q = seat != null ? `?seat=${seat}` : "";
-          return clip(await api(`/api/matches/${match_id}/observation${q}`));
+          const session = deskMatch();
+          const id = match_id ?? session?.match_id;
+          if (!id) return "No match is running. Call start_match first.";
+          const s = seat ?? session?.agent_seat;
+          const q = s != null ? `?seat=${s}` : "";
+          const res = await api(`/api/matches/${id}/observation${q}`);
+          if (res.error) return clip(res);
+          return clip(
+            {
+              match_id: id,
+              seat: res.seat,
+              revision: res.revision,
+              to_move: res.to_move,
+              your_turn: res.to_move === res.seat,
+              terminal: res.terminal,
+              rewards: res.rewards,
+              observation: res.observation,
+              legal_actions: res.legal_actions,
+            },
+            2200,
+          );
         },
       },
       {
         name: "take_action",
         description:
-          "Play one legal action. Requires expected_revision. Optional rationale and 1–5 confidence are stored on the trajectory.",
+          "Play one legal action in the match on screen. Quote expected_revision from your last observation. A rationale and a 1–5 confidence are recorded on the trajectory if you give them.",
         inputSchema: {
           type: "object",
           properties: {
-            match_id: { type: "string" },
             action: { type: "string" },
             expected_revision: { type: "integer" },
+            match_id: { type: "string" },
             rationale: { type: "string" },
             confidence: { type: "integer", minimum: 1, maximum: 5 },
           },
-          required: ["match_id", "action", "expected_revision"],
+          required: ["action", "expected_revision"],
           additionalProperties: false,
         },
-        execute: async ({ match_id, ...rest }) =>
-          clip(
-            await api(`/api/matches/${match_id}/action`, {
-              method: "POST",
-              body: JSON.stringify({ ...rest, interface: "webmcp" }),
+        execute: async ({ match_id, ...rest }) => {
+          const session = deskMatch();
+          const id = match_id ?? session?.match_id;
+          if (!id) return "No match is running. Call start_match first.";
+          const res = await api(`/api/matches/${id}/action`, {
+            method: "POST",
+            body: JSON.stringify({
+              ...rest,
+              seat: session?.agent_seat,
+              interface: "webmcp",
             }),
-          ),
+          });
+          if (res.error) return clip(res);
+          await currentDesk()?.refresh();
+          const m = res.match;
+          return clip(
+            {
+              ok: true,
+              played: rest.action,
+              revision: m?.revision,
+              to_move: m?.to_move,
+              terminal: m?.terminal,
+              rewards: m?.rewards,
+              your_turn: m?.to_move === session?.agent_seat,
+              observation: res.observation?.observation,
+              legal_actions: res.observation?.legal_actions,
+            },
+            2200,
+          );
+        },
       },
       {
         name: "wait_for_turn",
         description:
-          "Wait up to 8 seconds for the match revision to advance. Returns still_waiting if nothing changed.",
+          "Hold for up to 8 seconds while the person moves, then return the new position. Returns still_waiting if they have not played yet, which means call it again.",
         inputSchema: {
           type: "object",
           properties: {
@@ -298,21 +505,42 @@ export function ArenaTools() {
             after_revision: { type: "integer" },
             timeout_ms: { type: "integer" },
           },
-          required: ["match_id", "after_revision"],
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true },
         execute: async ({ match_id, after_revision, timeout_ms }) => {
-          const q = new URLSearchParams({
-            after_revision: String(after_revision),
-          });
+          const session = deskMatch();
+          const id = match_id ?? session?.match_id;
+          if (!id) return "No match is running. Call start_match first.";
+          const after = after_revision ?? session?.revision ?? 0;
+          const q = new URLSearchParams({ after_revision: String(after) });
+          if (session?.agent_seat != null) q.set("seat", String(session.agent_seat));
           if (timeout_ms != null) q.set("timeout_ms", String(timeout_ms));
-          return clip(await api(`/api/matches/${match_id}/wait?${q}`));
+          const res = await api(`/api/matches/${id}/wait?${q}`);
+          if (res.status === "still_waiting") {
+            return `still_waiting — the person has not moved since revision ${after}. Call wait_for_turn again.`;
+          }
+          await currentDesk()?.refresh();
+          const o = res.observation;
+          return clip(
+            {
+              status: "ready",
+              revision: o?.revision,
+              to_move: o?.to_move,
+              your_turn: o?.to_move === session?.agent_seat,
+              terminal: o?.terminal,
+              rewards: o?.rewards,
+              observation: o?.observation,
+              legal_actions: o?.legal_actions,
+            },
+            2200,
+          );
         },
       },
       {
         name: "export_episodes",
-        description: "Download recorded trajectories as JSONL for the given environment or match.",
+        description:
+          "What was recorded from the matches played here: the episode headers, one full sample row, and a download link for the complete JSONL. Defaults to the match on screen.",
         inputSchema: {
           type: "object",
           properties: {
@@ -324,74 +552,27 @@ export function ArenaTools() {
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async (input) => {
           const q = new URLSearchParams();
+          const id = input.match_id ?? (input.environment_id ? null : deskMatch()?.match_id);
           if (input.environment_id) q.set("environment_id", String(input.environment_id));
-          if (input.match_id) q.set("match_id", String(input.match_id));
-          return clip(await api(`/api/episodes?${q}`), 4000);
-        },
-      },
-      {
-        name: "preview_view",
-        description:
-          "Mount HTML/CSS and return the accessibility tree of what painted. Pass html+css to try a draft, or environment_id to run that env's render(). Call this after every markup change.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            html: { type: "string", description: "Draft markup. Clickable nodes need data-action." },
-            css: { type: "string", description: "Draft stylesheet. No url() or @import." },
-            environment_id: { type: "string", description: "Run saved render() on init and snapshot it." },
-            seed: { type: "integer" },
-            interactive: { type: "boolean", description: "Only buttons and data-action nodes." },
-          },
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ html, css, environment_id, seed, interactive }) => {
-          let view = {
-            html: typeof html === "string" ? html : "",
-            css: typeof css === "string" ? css : "",
-          };
-          let legal: string[] | undefined;
-          if (environment_id && !view.html) {
-            const q = new URLSearchParams();
-            if (seed != null) q.set("seed", String(seed));
-            const res = await api(`/api/environments/${environment_id}/view?${q}`);
-            if (res.error) return clip(res);
-            if (res.view) view = res.view;
-            legal = res.legal_actions;
-            if (!view.html) return clip(res, 2500);
-          }
-          if (!view.html) {
-            return JSON.stringify({
-              error: "Pass html or environment_id. Clickable elements need data-action matching legal ids.",
-            });
-          }
-          const snap = await snapshotDraft(view, {
-            interactive: !!interactive,
-            legal,
-          });
-          return clip({ ok: true, ...snap, legal_actions: legal ?? null }, 2500);
-        },
-      },
-      {
-        name: "inspect_view",
-        description:
-          "Read the accessibility tree of the live table on this page — the same loop as a snapshot after you write HTML. Sit down or call preview_view first.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            interactive: { type: "boolean", description: "Only buttons and data-action nodes." },
-          },
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ interactive }) => {
-          const snap = snapshotLiveTable({ interactive: !!interactive });
-          if (!snap) {
-            return JSON.stringify({
-              error: "No table is mounted. Call preview_view, or start_match / sit down, then inspect_view.",
-            });
-          }
-          return clip(snap, 2500);
+          if (id) q.set("match_id", String(id));
+          const res = await api(`/api/episodes?${q}`);
+          if (res.error) return clip(res);
+          const records: Array<Record<string, unknown>> = res.records ?? [];
+          const episodes = records.filter((r) => r.type === "episode");
+          const steps = records.filter((r) => r.type === "step");
+          // The whole file would blow past any sane context budget, so hand
+          // back the shape plus a link rather than the bytes.
+          const download = `${location.origin}/api/episodes?${q}&format=jsonl`;
+          return clip(
+            {
+              episodes: episodes.length,
+              steps: steps.length,
+              download,
+              headers: episodes.slice(0, 3),
+              sample_step: steps[0] ?? null,
+            },
+            2400,
+          );
         },
       },
     ];
@@ -408,9 +589,7 @@ export function ArenaTools() {
               try {
                 return await tool.execute(input ?? {});
               } catch (e) {
-                return JSON.stringify({
-                  error: e instanceof Error ? e.message : String(e),
-                });
+                return `error: ${e instanceof Error ? e.message : String(e)}`;
               }
             },
           },
@@ -422,6 +601,10 @@ export function ArenaTools() {
     }
 
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    void waitForDesk(0);
   }, []);
 
   return null;

@@ -1,65 +1,98 @@
-export const AUTHORING_GUIDE = `# Arena environment contract
+export const AUTHORING_GUIDE = `# Authoring an environment
 
-An environment is five pure JavaScript functions. No modules, no Date, no Math.random, no I/O.
-The sandbox injects rng(n) — a seeded PRNG. Thread a rng_cursor through state if you need chance.
+An environment is five pure JavaScript functions plus the table they draw. You write all of it.
 
-## Functions
+No modules, no Date, no Math.random, no I/O. The sandbox injects rng(n), a seeded PRNG. If the
+game needs chance, keep a rng_cursor on state and thread it through.
+
+## The five functions
 
 init(seed) -> state
-  state MUST include numeric to_move (current seat, 0-indexed).
-  Include rng_cursor: seed if you will draw random values.
+  state MUST include a numeric to_move (the seat whose turn it is, 0-indexed).
+  Add rng_cursor: seed if you will draw random values.
 
 legal_actions(state, player) -> string[]
-  Empty only when it is not that player's turn. Never empty on a non-terminal state for to_move.
-  Action ids are short strings: "col_3", "cell_4", "fold".
+  Return [] when it is not that player's turn. Never [] for to_move on a non-terminal state.
+  Action ids are short strings: "col_3", "cell_4", "bet".
 
 observe(state, player) -> observation
-  THIS IS THE FAIR-PLAY BOUNDARY. Return only what that seat is allowed to know.
-  Never return the raw state object if it holds another seat's private fields.
-  Perfect-information games may return the board. Hidden-information games must project.
+  This is the fair-play boundary. Return only what that seat may know.
+  Perfect-information games can return the board. Hidden-information games must project:
+  return your_card, not both hands. Never return the raw state object if it holds a secret.
 
 step(state, action) -> { state, rewards, terminal }
-  rewards is a number[] of length equal to the number of players.
-  Throw if action is not in legal_actions(state, state.to_move).
-  On a win, rewards are typically [1,-1] or [-1,1]. Draws [0,0].
+  rewards is a number[] with one entry per player. Throw if the action is not legal.
+  Wins are usually [1,-1] or [-1,1]; draws [0,0].
 
 render(observation) -> { html, css }
-  You write the table. Return HTML and CSS strings — not a UI tree. No <script>, no event
-  handlers, no url(). Put data-action="<legal id>" on every clickable control. The page hosts
-  your markup and wires clicks to take_action.
-  After you change markup: preview_view({ html, css }) or preview_view({ environment_id }).
-  After a match is up: inspect_view(). Look at the tree. Do not guess at layout.
+  You write the table as HTML and CSS strings. The page mounts them in a sandboxed frame,
+  wires clicks, and disables anything that is not currently legal.
 
-## How the table should feel
+## Writing render()
 
-You own the look. The surrounding page is warm paper (#f4efe6). Your board sits on it.
+- Return { html: "...", css: "..." }. Both are strings. A UI tree is not accepted.
+- Every clickable control needs data-action="<legal action id>" and should be a
+  <button aria-label="..."> so it is focusable and has a name.
+- No <script>, no onclick, no url(), no @import, no external images. They are stripped.
+- Draw from the observation. Every cell, card and counter must be read out of the values you
+  were handed — never hardcoded. Include whose turn it is.
+- Size things yourself. Wrap the board in width:max-content so the surface hugs the grid
+  instead of stretching, and put controls on the same grid template as the columns they act on.
 
-Boards (Connect Four and similar): a dark green felt slab (#1b4a38) with rounded corners and
-circular holes (#14392c). Seat 0 discs gold (#d4a24a), seat 1 bone (#efe6d4), with a light
-radial highlight so they read as physical pieces. Drop controls above each column
-(data-action="col_N") with a small downward chevron. Wrap the controls and the board in one
-column with width:max-content so the felt hugs the grid and the drop targets sit on the
-columns. Use <button aria-label="Column N">, not an empty div.
+## The loop that matters: look at what you built
 
-Notebook games: an ink hash (no outer box), serif X/O, opponent marks in rust (#b33a1a).
+You cannot tell whether a board is right by reading your own HTML. Call preview_view.
 
-Cards: a white rectangle, rank in the corner, serif, soft shadow. Actions as dark pills.
+  preview_view({ html, css })                       - look at a draft
+  preview_view({ environment_id })                  - look at the saved render()
+  preview_view({ environment_id, moves: ["col_3","col_4"] })  - look at it mid-game
+  inspect_view()                                    - look at the live table someone is playing
 
-Write that CSS yourself. Call preview_view after every markup change. If the snapshot has no
-data-action nodes, the human cannot play.
+It answers with what actually painted: repeated boxes come back as a character grid with the real
+colours, everything else as positioned text, plus every control with its size, plus a list of
+problems. For example:
 
-## Seeing what you built
+  ok: false
+  size: 306x286px
 
-preview_view — mount a draft (html+css) or run saved render (environment_id) and return the
-accessibility tree plus the data-action ids that painted.
-inspect_view — snapshot the live table.
+  what painted:
+  grid 7 cols x 6 rows, cell 40x40px:
+    . . . . . . .
+    . . . . . . .
+    . . . . . . .
+    . . . . . . .
+    . . . A . . .
+    . . B A . . .
+    legend: .=#14392c x40  A=#d4a24a x2  B=#efe6d4 x1
+  around it:
+    [Column 1 -> col_0]  [Column 2 -> col_1]  ...
+    your turn
 
-## Determinism
+  problems to fix:
+    - the 7 controls are up to 31px off from the columns they act on
 
-Same (seed, action list) must hash to the same states. If you shuffle, do it with rng(cursor++)
-and write the next cursor back into state.
+Read the grid like a picture. If you played col_3 twice and the A discs are not stacked in the
+fourth column, your markup and your state disagree. Always preview mid-game with moves — an empty
+board looks correct even when nothing is wired up. Fix, save, preview again, and keep going until
+problems is empty.
 
-## Worked example — Tic-Tac-Toe (copy, then adapt)
+## Making it look good
+
+The page around you is warm paper (#f4efe6) with dark ink (#1c1814). Aim for something that looks
+like a real object sitting on a desk, not a web form.
+
+Boards: a dark felt slab (#1b4a38) with generous rounded corners and circular holes cut into it
+(#14392c). Pieces as discs with a radial highlight so they read as physical - gold
+(radial-gradient(circle at 32% 28%, #f3d37a, #d4a24a 62%, #a87a20)) for seat 0, bone
+(#fffaf0 -> #efe6d4 -> #c9bea6) for seat 1. Drop controls above each column with a small chevron.
+
+Notebook games: no outer box, just ink rules. Serif marks, opponent in rust (#b33a1a).
+
+Cards: white rectangles, rank in the corner, serif, soft shadow underneath. Actions as dark pills.
+
+Keep the whole table under about 420px wide so it sits comfortably beside the trajectory panel.
+
+## Worked example — Tic-Tac-Toe
 
 function init(seed) {
   return { board: [null,null,null,null,null,null,null,null,null], to_move: 0, rng_cursor: seed };
@@ -76,6 +109,7 @@ function observe(state, player) {
 function step(state, action) {
   if (typeof action !== "string" || action.indexOf("cell_") !== 0) throw new Error("illegal action");
   var i = parseInt(action.slice(5), 10);
+  if (!(i >= 0 && i < 9)) throw new Error("illegal cell");
   if (state.board[i] !== null) throw new Error("illegal: cell taken");
   var board = state.board.slice();
   board[i] = state.to_move;
@@ -93,26 +127,31 @@ function step(state, action) {
   return { state: next, rewards: [0,0], terminal: false };
 }
 function render(observation) {
+  var marks = ["X", "O"];
   var html = "<div class='ttt'><div class='board'>";
   for (var i = 0; i < 9; i++) {
     var v = observation.board[i];
-    var mark = v === 0 ? "X" : v === 1 ? "O" : "";
-    var cls = v === 0 ? "x" : v === 1 ? "o" : "empty";
-    html += "<button class='cell " + cls + "' data-action='cell_" + i + "'>" + mark + "</button>";
+    var mark = v === null ? "" : marks[v];
+    var cls = v === 1 ? "cell o" : "cell";
+    html += "<button class='" + cls + "' data-action='cell_" + i + "' aria-label='Cell " + (i+1) + "'>" + mark + "</button>";
   }
-  html += "</div><p>" + (observation.to_move === observation.you_are ? "your turn" : "waiting") + "</p></div>";
-  var css = ".ttt{display:flex;flex-direction:column;align-items:center;gap:12px}.board{display:grid;grid-template-columns:repeat(3,54px)}.cell{width:54px;height:54px;border:0;border-right:2.5px solid #1c1814;border-bottom:2.5px solid #1c1814;background:#faf6ee;font:28px Georgia,serif}.cell:nth-child(3n){border-right:0}.cell:nth-child(n+7){border-bottom:0}.cell.o{color:#b33a1a}";
+  html += "</div><p class='who'>" + (observation.to_move === observation.you_are ? "your turn" : "waiting") + "</p></div>";
+  var css = ".ttt{display:flex;flex-direction:column;align-items:center;gap:12px;width:max-content}"
+    + ".board{display:grid;grid-template-columns:repeat(3,54px)}"
+    + ".cell{width:54px;height:54px;border:0;border-right:2.5px solid #1c1814;border-bottom:2.5px solid #1c1814;background:#faf6ee;font:28px Georgia,serif;color:#1c1814}"
+    + ".cell:nth-child(3n){border-right:0}.cell:nth-child(n+7){border-bottom:0}.cell.o{color:#b33a1a}"
+    + ".who{margin:0;color:#6e675c;font-size:14px}";
   return { html: html, css: css };
 }
 
-## How to author
+## Order of work
 
-1. Call create_environment with a name and as many functions as you have. Partial is fine.
-2. Write render as { html, css }. Call preview_view after each markup change.
-3. Read the validation failures. They name the function and the line.
-4. Patch one function at a time with update_environment.
-5. inspect_view once a match is up. When checks pass, describe_dataset, then publish_environment.
-6. Hidden templates you may fork: env_tictactoe, env_connect_four, env_kuhn.
-
-Connect Four: 6×7, actions col_0..col_6, four in a row, gravity (fill from the bottom).
+1. create_environment with a name and whatever functions you have. Partial is fine.
+2. Fix whatever validation reports. It names the function and the line.
+3. Write render, then preview_view. Then preview_view with moves. Then fix. Then again.
+4. update_environment patches one function at a time — quote expected_revision.
+5. When every check passes: describe_dataset, publish_environment.
+6. start_match puts the board on the person's screen with you in the other seat. Then
+   get_observation, take_action, wait_for_turn while they think, and inspect_view whenever you
+   want to confirm the board shows what you think it shows.
 `;

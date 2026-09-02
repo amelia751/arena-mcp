@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { listEnvironments } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -33,11 +34,11 @@ export default async function Home() {
 
       <p className="patterns">
         Hidden patterns the agent can fork:{" "}
-        <a href="/e/env_tictactoe">Tic-Tac-Toe</a>
+        <Link href="/e/env_tictactoe">Tic-Tac-Toe</Link>
         {" · "}
-        <a href="/e/env_connect_four">Connect Four</a>
+        <Link href="/e/env_connect_four">Connect Four</Link>
         {" · "}
-        <a href="/e/env_kuhn">Kuhn Poker</a>
+        <Link href="/e/env_kuhn">Kuhn Poker</Link>
       </p>
     </main>
   );

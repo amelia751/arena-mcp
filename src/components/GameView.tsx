@@ -1,67 +1,80 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { sanitizeView, type AuthoredView } from "@/lib/view";
-import { registerLiveTable, snapshotElement } from "@/lib/view-dom";
+import type { AuthoredView } from "@/lib/view";
+import { mountView, type ViewHandle } from "@/lib/view-frame";
+import { registerLiveTable } from "@/lib/view-dom";
+
+const EMPTY: AuthoredView = { html: "", css: "" };
 
 export function GameView({
   view,
   legal,
   disabled,
+  environmentId,
+  matchId,
+  moved,
   onAction,
 }: {
   view: AuthoredView;
   legal: string[];
   disabled?: boolean;
+  environmentId: string;
+  matchId: string | null;
+  moved?: boolean;
   onAction?: (id: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const handle = useRef<ViewHandle | null>(null);
   const actionRef = useRef(onAction);
-  actionRef.current = onAction;
+  const legalRef = useRef(legal);
+  const variedRef = useRef(false);
+  const legalKey = legal.join("|");
 
+  useEffect(() => {
+    actionRef.current = onAction;
+  }, [onAction]);
+
+  // One frame per environment; every later change goes through update().
   useEffect(() => {
     const el = host.current;
     if (!el) return;
-    const root = el.shadowRoot ?? el.attachShadow({ mode: "open" });
-    const clean = sanitizeView(view);
-    root.innerHTML = `<style>
-:host{display:block;width:max-content;max-width:100%;margin-inline:auto}
-*{box-sizing:border-box}
-button{font:inherit;cursor:pointer}
-button:disabled{cursor:default}
-[data-action][aria-disabled="true"]{pointer-events:none;opacity:.35}
-${clean.view.css}
-</style>${clean.view.html}`;
-
-    for (const node of root.querySelectorAll<HTMLElement>("[data-action]")) {
-      const id = node.getAttribute("data-action") || "";
-      const off = !!(disabled || !legal.includes(id));
-      if (off) {
-        node.setAttribute("disabled", "");
-        node.setAttribute("aria-disabled", "true");
-      } else {
-        node.removeAttribute("disabled");
-        node.removeAttribute("aria-disabled");
-      }
-    }
-
-    const onClick = (e: Event) => {
-      const target = (e.target as Element | null)?.closest?.("[data-action]");
-      if (!target) return;
-      e.preventDefault();
-      const id = target.getAttribute("data-action");
-      if (!id || disabled || !legal.includes(id)) return;
-      actionRef.current?.(id);
-    };
-    root.addEventListener("click", onClick);
-    registerLiveTable({
-      snapshot: (opts) => snapshotElement(root, opts),
-    });
+    const h = mountView(el, EMPTY, { onAction: (id) => actionRef.current?.(id) });
+    handle.current = h;
     return () => {
-      root.removeEventListener("click", onClick);
-      registerLiveTable(null);
+      handle.current = null;
+      h.destroy();
     };
-  }, [view.html, view.css, legal.join("|"), disabled]);
+  }, [environmentId]);
+
+  useEffect(() => {
+    handle.current?.update(view);
+  }, [view]);
+
+  useEffect(() => {
+    legalRef.current = legal;
+    variedRef.current = !!moved;
+    handle.current?.setLegal(legal, !!disabled);
+  }, [legal, legalKey, disabled, moved, view]);
+
+  useEffect(() => {
+    registerLiveTable({
+      environment_id: environmentId,
+      match_id: matchId,
+      snapshot: async (opts) =>
+        (await handle.current?.snapshot(opts)) ?? {
+          picture: "(the table is not mounted)",
+          controls: [],
+          actions: [],
+          size: { width: 0, height: 0 },
+          problems: ["no table is mounted on the page"],
+          notes: [],
+        },
+      legal: () => legalRef.current,
+      varied: () => variedRef.current,
+    });
+    return () => registerLiveTable(null);
+  }, [environmentId, matchId]);
 
   return <div ref={host} className="game-host" />;
 }

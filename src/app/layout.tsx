@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import Link from "next/link";
 import { ArenaTools } from "@/components/ArenaTools";
 import "./globals.css";
 
@@ -34,9 +35,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ArenaTools />
         <div className="shell">
           <nav className="site-nav">
-            <a className="wordmark" href="/">
+            <Link className="wordmark" href="/">
               Arena
-            </a>
+            </Link>
             <span>A table for games you have not written yet</span>
           </nav>
           {children}

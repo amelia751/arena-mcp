@@ -100,8 +100,8 @@ export const CONNECT_FOUR_CODE: EnvCode = {
       html += "<span class='cell " + mark + "'></span>";
     }
   }
-  html += "</div></div>";
-  var css = ".c4{display:flex;flex-direction:column;align-items:center}.drops{display:grid;grid-template-columns:repeat(7,40px);margin-bottom:6px}.drop{height:16px;border:0;background:transparent;position:relative}.drop:not(:disabled):after{content:'';position:absolute;left:50%;top:2px;transform:translateX(-50%);border:5px solid transparent;border-top-color:#f4efe6}.board{display:grid;grid-template-columns:repeat(7,40px);gap:5px;padding:14px;background:#1b4a38;border-radius:18px}.cell{width:40px;height:40px;border-radius:50%;background:#14392c;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}.cell.x{background:radial-gradient(circle at 32% 28%,#f3d37a,#d4a24a 62%,#a87a20);box-shadow:none}.cell.o{background:radial-gradient(circle at 32% 28%,#fffaf0,#efe6d4 60%,#c9bea6);box-shadow:none}";
+  html += "</div><p class='who'>" + (observation.to_move === observation.you_are ? "your turn" : "waiting") + "</p></div>";
+  var css = ".c4{display:flex;flex-direction:column;align-items:center;gap:6px;width:max-content}.drops,.board{display:grid;grid-template-columns:repeat(7,40px);gap:5px}.drops{padding:0 14px}.drop{height:18px;border:0;background:transparent;position:relative}.drop:not(:disabled):after{content:'';position:absolute;left:50%;top:4px;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1c1814}.board{padding:14px;background:#1b4a38;border-radius:18px}.cell{width:40px;height:40px;border-radius:50%;background:#14392c;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}.cell.x{background:radial-gradient(circle at 32% 28%,#f3d37a,#d4a24a 62%,#a87a20);box-shadow:none}.cell.o{background:radial-gradient(circle at 32% 28%,#fffaf0,#efe6d4 60%,#c9bea6);box-shadow:none}.who{margin:2px 0 0;color:#6e675c;font-size:14px}";
   return { html: html, css: css };
 }`,
 };

@@ -14,7 +14,7 @@ export type InfoFlowRow = {
 };
 
 export type CheckResult = {
-  id: "V0" | "V1" | "V2" | "V3" | "V4" | "V5" | "V6";
+  id: "V0" | "V1" | "V2" | "V3" | "V4" | "V5" | "V6" | "V7";
   ok: boolean;
   summary: string;
   detail?: string;
@@ -33,6 +33,12 @@ export type ValidationReport = {
     ms: number;
   };
   sample_step?: Record<string, unknown>;
+  render_coverage?: {
+    seat: number;
+    painted: string[];
+    dark: string[];
+    skipped: string[];
+  };
 };
 
 export type Environment = {

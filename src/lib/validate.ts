@@ -48,10 +48,14 @@ export async function validateEnvironment(
   let info_flow: InfoFlowRow[] = [];
   let playouts: ValidationReport["playouts"];
   let sample_step: Record<string, unknown> | undefined;
+  let render_coverage: ValidationReport["render_coverage"];
 
   const push = (c: CheckResult) => {
     checks.push(c);
-    if (!c.ok) failures.push(`${c.id}: ${c.detail || c.summary}`);
+    if (!c.ok) {
+      const text = c.detail || c.summary;
+      failures.push(text.startsWith(`${c.id}:`) ? text : `${c.id}: ${text}`);
+    }
   };
 
   try {
@@ -273,6 +277,60 @@ export async function validateEnvironment(
         push({ id: "V4", ok: false, summary: "Sweep threw", detail: guestError(e) });
       }
 
+      // V7 render coverage — does the markup actually show the position?
+      try {
+        const cov = realm.call<{
+          error?: string;
+          fn?: string;
+          seat?: number;
+          painted?: string[];
+          dark?: string[];
+          skipped?: string[];
+        }>("__render_coverage", { seed: 5, policy_seed: 11, depth: 4 }, 5000);
+        if (cov.error) {
+          push({
+            id: "V7",
+            ok: false,
+            summary: "Could not check what render paints",
+            detail: `V7: ${cov.fn || "render"}: ${cov.error}`,
+          });
+        } else {
+          const painted = cov.painted ?? [];
+          const dark = cov.dark ?? [];
+          const checked = painted.length + dark.length;
+          render_coverage = { painted, dark, skipped: cov.skipped ?? [], seat: cov.seat ?? 0 };
+          const ratio = checked ? painted.length / checked : 0;
+          if (checked === 0) {
+            push({
+              id: "V7",
+              ok: true,
+              summary: "Observation has no scalar fields to check against the markup",
+            });
+          } else if (ratio < 0.6) {
+            const named = dark.slice(0, 8).join(", ");
+            push({
+              id: "V7",
+              ok: false,
+              summary: `render paints only ${painted.length} of ${checked} observation fields`,
+              detail:
+                `V7: changing these observation fields does not change the markup at all, so the person cannot see them: ${named}${dark.length > 8 ? `, +${dark.length - 8} more` : ""}.\n` +
+                `render(observation) must read the observation and paint it — draw every cell, card, and counter from the values it is given, not from constants.`,
+            });
+          } else {
+            push({
+              id: "V7",
+              ok: true,
+              summary: `render paints ${painted.length} of ${checked} observation fields`,
+              detail: dark.length
+                ? `Not shown anywhere in the markup: ${dark.slice(0, 8).join(", ")}. Consider painting them so the person can see them.`
+                : undefined,
+            });
+          }
+        }
+      } catch (e) {
+        push({ id: "V7", ok: false, summary: "Render coverage check threw", detail: guestError(e) });
+      }
+
       // V5 information flow
       try {
         const flow = realm.call<{
@@ -329,5 +387,6 @@ export async function validateEnvironment(
     info_flow,
     playouts,
     sample_step,
+    render_coverage,
   };
 }

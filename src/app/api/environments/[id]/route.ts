@@ -1,5 +1,5 @@
 import { getEnv, updateEnv } from "@/lib/env-service";
-import { fromResult, json, readBody } from "@/lib/http";
+import { fromResult, readBody } from "@/lib/http";
 import type { EnvCode } from "@/lib/types";
 
 export async function GET(

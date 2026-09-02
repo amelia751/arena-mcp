@@ -10,6 +10,7 @@ import {
   replaceMatchAndStep,
 } from "./store";
 import { withRealm } from "./sandbox";
+import { validateEnv } from "./env-service";
 import { fallbackView, parseRender, sanitizeView, type AuthoredView } from "./view";
 
 function shuffle<T>(items: T[], seed: number): { items: T[]; order: number[] } {
@@ -45,7 +46,13 @@ export async function startMatch(input: {
   agent_label?: string;
   seed?: number;
 }) {
-  const env = await requireEnv(input.environment_id);
+  // Every trajectory says which checks the environment passed, so make sure it
+  // has been checked before anything is recorded against it.
+  let env = await requireEnv(input.environment_id);
+  if (!env.validation) {
+    await validateEnv(env.id, 120);
+    env = await requireEnv(input.environment_id);
+  }
   const seed = input.seed ?? (Date.now() % 1_000_000);
   const humanSeat = input.seat ?? 0;
   const seats: Seat[] = [
@@ -219,7 +226,10 @@ export async function botMove(match_id: string) {
     realm.call<string[]>("__legal", { state: match.state, player: match.to_move }),
   );
   if (!legal.length) return { error: "no legal actions", status: 409 as const };
-  const action = legal[Math.floor(Math.random() * legal.length)];
+  // Seeded off the match so a replay of the trajectory reproduces the bot too.
+  let s = (match.seed * 2654435761 + match.revision * 40503) >>> 0;
+  s = (Math.imul(s ^ (s >>> 15), 1 | s) + 1013904223) >>> 0;
+  const action = legal[s % legal.length];
   return takeAction({
     match_id,
     action,

@@ -56,4 +56,42 @@ await page.screenshot({ path: path.join(OUT, "live-table.png") });
 console.log("\n--- inspect_view ---");
 console.log(await call("inspect_view", {}));
 
+// Layout faults a person spots instantly and a projection has to say out loud,
+// each paired with the same table built correctly so the check cannot pass by
+// simply complaining about everything.
+console.log(`\n${"=".repeat(72)}\nwhat the report catches\n${"=".repeat(72)}`);
+let failures = 0;
+const card = (extra = "") =>
+  `<div class="board"><div class="hand">${"<div class='c'>x</div>".repeat(8)}</div>` +
+  `<div class="them"${extra}><div class="card">Charizard 100 HP</div></div>` +
+  `<button data-action="attack" aria-label="Attack">Attack</button></div>`;
+const base = `.board{width:300px;background:#222;padding:8px;color:#fff}.c{width:70px;height:60px;background:#444}
+.card{background:#333;padding:8px;width:120px}button{height:34px;background:#4a4;color:#000}`;
+
+for (const [what, args, expected] of [
+  [
+    "text rotated to face the other player",
+    { html: card(), css: `${base}.hand{display:flex;gap:6px}.them{transform:rotate(180deg)}` },
+    /upside down/,
+  ],
+  [
+    "a row wider than the box it sits in",
+    { html: card(), css: `${base}.hand{display:flex;gap:6px;width:640px}` },
+    /sticks out/,
+  ],
+  [
+    "the same table, upright and contained",
+    { html: card(), css: `${base}.hand{display:flex;gap:6px;flex-wrap:wrap}` },
+    null,
+  ],
+]) {
+  const out = await call("preview_view", args);
+  const flagged = expected ? expected.test(out) : /^ok: true/.test(out);
+  if (!flagged) failures++;
+  console.log(`${flagged ? "ok  " : "FAIL"} ${what}`);
+  if (!flagged) console.log(out.split("\n").slice(0, 12).join("\n"));
+}
+
 await browser.close();
+console.log(failures ? `\n${failures} failed` : "\nthe report says what a person would say");
+process.exit(failures ? 1 : 0);

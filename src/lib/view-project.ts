@@ -47,6 +47,8 @@ export function project(options?: ProjectOptions): Projection {
     leaf: boolean;
     round: boolean;
     disabled: boolean;
+    spun: number;
+    clips: boolean;
   };
 
   // Authored text lands inside a report the agent reads as prose, so it must not be able to
@@ -120,6 +122,14 @@ export function project(options?: ProjectOptions): Projection {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) continue;
     const radius = parseFloat(cs.borderTopLeftRadius) || 0;
+    // A rotated element is a deliberate choice everywhere except on text, where
+    // it is usually a card meant to face the other player and ends up unreadable.
+    const m = cs.transform && cs.transform !== "none" ? cs.transform.match(/matrix\(([^)]+)\)/) : null;
+    let spun = 0;
+    if (m) {
+      const p = m[1].split(",").map(parseFloat);
+      if (p.length >= 4) spun = Math.round((Math.atan2(p[1], p[0]) * 180) / Math.PI);
+    }
     nodes.push({
       el,
       r,
@@ -130,6 +140,8 @@ export function project(options?: ProjectOptions): Projection {
       leaf: el.children.length === 0,
       round: radius >= Math.min(r.width, r.height) / 2 - 1,
       disabled: el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true",
+      spun,
+      clips: cs.overflow !== "visible",
     });
   }
 
@@ -361,6 +373,45 @@ export function project(options?: ProjectOptions): Projection {
   for (const n of nodes) {
     if (n.text && n.el.scrollWidth > n.el.clientWidth + 2 && n.el.clientWidth > 0) {
       problems.push(`text is clipped in <${n.el.tagName.toLowerCase()}>: "${n.text.slice(0, 40)}"`);
+      break;
+    }
+  }
+
+  // Turning the opponent's cards to face them reads well on a real table and not
+  // at all on a screen, where the person is looking at the whole board upright.
+  // The rotation is usually set on a wrapper, so the text inherits it from above.
+  const ownSpin = new Map<Element, number>();
+  for (const n of nodes) ownSpin.set(n.el, n.spun);
+  const spinOf = (el: Element): number => {
+    let total = 0;
+    for (let cur: Element | null = el; cur && cur !== document.body; cur = cur.parentElement) {
+      total += ownSpin.get(cur) ?? 0;
+    }
+    return total;
+  };
+  for (const n of nodes) {
+    const spun = n.text ? spinOf(n.el) : 0;
+    if (!n.text || Math.abs(spun) < 12) continue;
+    const turn = Math.abs(spun) > 170 ? "upside down" : `turned ${spun}°`;
+    problems.push(
+      `"${n.text.slice(0, 30)}" is ${turn}, so the person cannot read it — keep text upright and show whose side it is some other way`,
+    );
+    break;
+  }
+
+  // A row of cards wider than the felt it sits on looks broken, and the frame
+  // check above misses it because the whole table still fits the viewport.
+  for (const n of nodes) {
+    if (!n.paint || n.clips || n.r.width < 80) continue;
+    let worst = 0;
+    for (const c of nodes) {
+      if (c === n || !n.el.contains(c.el)) continue;
+      worst = Math.max(worst, n.r.left - c.r.left, c.r.right - n.r.right);
+    }
+    if (worst > 8) {
+      problems.push(
+        `something inside <${n.el.tagName.toLowerCase()}> sticks out ${Math.round(worst)}px past its edge — give the row the same width as the box, or let the box grow to fit`,
+      );
       break;
     }
   }

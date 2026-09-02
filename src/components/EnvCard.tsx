@@ -2,7 +2,7 @@ import type { Environment } from "@/lib/types";
 import { cardBlurb, envTheme } from "@/lib/theme";
 import { EnvIcon } from "./EnvIcon";
 
-export function EnvCard({ env }: { env: Environment }) {
+export function EnvCard({ env }: { env: Pick<Environment, "id" | "name" | "description"> }) {
   const theme = envTheme(env.id);
 
   return (

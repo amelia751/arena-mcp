@@ -39,19 +39,19 @@ type BlobStore = {
   get: (key: string) => Promise<string | null>;
   setJSON: (key: string, value: unknown) => Promise<unknown>;
 };
-let blobStore: BlobStore | false | null = null;
+let blobStore: BlobStore | null = null;
 
 async function blobs(): Promise<BlobStore | null> {
   if (!SERVERLESS) return null;
-  if (blobStore === null) {
-    try {
-      const { getStore } = await import("@netlify/blobs");
-      blobStore = getStore({ name: "arena", consistency: "strong" }) as BlobStore;
-    } catch {
-      blobStore = false;
-    }
+  if (blobStore) return blobStore;
+  try {
+    const { getStore } = await import("@netlify/blobs");
+    blobStore = getStore({ name: "arena", consistency: "strong" }) as BlobStore;
+    return blobStore;
+  } catch {
+    // Do not cache a failed init — the next request may have the context.
+    return null;
   }
-  return blobStore || null;
 }
 
 async function load(): Promise<DB> {

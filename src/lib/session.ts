@@ -1,3 +1,5 @@
+import { reloadLive } from "./live";
+
 /**
  * The bridge between the board the human is looking at and the tools the agent
  * calls. One page, one match: whatever the agent starts is what the human sees.
@@ -72,6 +74,9 @@ export function registerRefresher(fn: (() => Promise<void>) | null) {
  * — so a follow-up inspect_view reads the board that the person can actually see.
  */
 export async function refreshView(): Promise<void> {
+  // The gallery and env chrome read the store over the API. Wait for those
+  // fetches before the tool answers, so the person sees the write.
+  await reloadLive();
   if (refresher) await refresher();
   // The board's markup came from render() and lives in client state, so re-fetching
   // the route alone would leave a rewritten table on screen looking like the old one.

@@ -103,9 +103,9 @@ and every seat can see its own deal without `undefined` in it.
 | `wait_for_turn` | Bounded wait for the person to move |
 | `export_episodes` | What was recorded, plus a download link |
 
-The person and the agent share one page, so a tool that writes repaints the table before it
-answers. A draft the agent creates is on screen by the time it says so, and nothing here needs a
-reload to be seen.
+The person and the agent share one page, so a tool that writes reloads the gallery from the live
+list and repaints the table before it answers. A draft the agent creates is on screen by the time
+it says so, and nothing here needs a reload to be seen.
 
 ## Dataset
 

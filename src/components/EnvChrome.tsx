@@ -8,7 +8,7 @@ export function EnvChrome({
   current,
   children,
 }: {
-  env: Environment;
+  env: Pick<Environment, "id" | "name">;
   current: EnvTab;
   kicker?: string;
   children: React.ReactNode;

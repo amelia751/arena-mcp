@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Arena
 
-## Getting Started
+Author a game environment as five JavaScript functions, verify it, play it against a person or an
+agent, and keep the match as reinforcement-learning trajectories.
 
-First, run the development server:
+The human uses the board. An agent on the same page uses tools registered on
+`document.modelContext`. Both write into one dataset.
+
+## Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. Three reference environments are already published: Tic-Tac-Toe,
+Connect Four, and Kuhn Poker.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## The environment contract
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```js
+init(seed)                   -> state
+legal_actions(state, player) -> string[]
+observe(state, player)       -> observation
+step(state, action)          -> { state, rewards, terminal }
+render(observation)          -> UI tree
+```
 
-## Learn More
+Functions are pure. `Date`, `Math.random`, and I/O are unavailable. Use the injected `rng(n)` if
+the game needs chance, and keep a `rng_cursor` on state.
 
-To learn more about Next.js, take a look at the following resources:
+Publishing runs V0–V6: the code runs, the same seed replays, illegal actions are rejected,
+random playouts terminate, `observe` does not leak another seat's private fields, and `render`
+returns a known UI tree.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tools
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Tool | What it does |
+| --- | --- |
+| `get_authoring_guide` | Contract, UI vocabulary, worked Tic-Tac-Toe |
+| `list_environments` | Gallery |
+| `get_environment` | Spec and source, optionally one function |
+| `create_environment` | New draft; validation runs immediately |
+| `fork_environment` | Copy a validated environment |
+| `update_environment` | Patch one function |
+| `validate_environment` | V0–V6 plus playouts, as repair text |
+| `describe_dataset` | Trajectory schema and a sample row |
+| `publish_environment` | Shareable `/e/{id}` if checks pass |
+| `start_match` | Open a match |
+| `get_observation` | That seat's view and legal actions |
+| `take_action` | Play a legal action |
+| `wait_for_turn` | Bounded wait for the next revision |
+| `export_episodes` | JSONL trajectories |
 
-## Deploy on Vercel
+## Dataset
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Each match is an `episode` header plus `step` rows:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+observation, legal_actions, action, reward, terminal, latency_ms
+```
+
+Download from the play panel or `GET /api/episodes?match_id=…&format=jsonl`. A Python loader lives
+in `arena_dataset.py`.
+
+## License
+
+MIT. Recorded trajectories are intended to be used as training data (CC0).

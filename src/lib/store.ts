@@ -1,0 +1,137 @@
+import "server-only";
+import { mkdir, readFile, rename, stat, writeFile } from "fs/promises";
+import path from "path";
+import type { Environment, Match, StepRecord } from "./types";
+import { referenceEnvironments } from "./refs";
+
+export type DB = {
+  environments: Record<string, Environment>;
+  matches: Record<string, Match>;
+  steps: Record<string, StepRecord[]>;
+};
+
+const FILE = process.env.ARENA_DATA ?? path.join(process.cwd(), ".data", "store.json");
+
+let mem: DB | null = null;
+let memMtime = 0;
+let writeChain: Promise<void> = Promise.resolve();
+
+function empty(): DB {
+  const environments: Record<string, Environment> = {};
+  for (const e of referenceEnvironments()) environments[e.id] = e;
+  return { environments, matches: {}, steps: {} };
+}
+
+async function load(): Promise<DB> {
+  let mtime = 0;
+  try {
+    mtime = (await stat(FILE)).mtimeMs;
+  } catch {
+    mtime = 0;
+  }
+  if (mem && mtime && mtime === memMtime) return mem;
+  try {
+    const raw = await readFile(FILE, "utf8");
+    mem = JSON.parse(raw) as DB;
+    memMtime = mtime;
+    for (const e of referenceEnvironments()) {
+      if (!mem.environments[e.id]) mem.environments[e.id] = e;
+    }
+    return mem;
+  } catch {
+    mem = empty();
+    await persist(mem);
+    return mem;
+  }
+}
+
+async function persist(db: DB) {
+  await mkdir(path.dirname(FILE), { recursive: true });
+  const tmp = FILE + ".tmp";
+  await writeFile(tmp, JSON.stringify(db), "utf8");
+  await rename(tmp, FILE);
+  try {
+    memMtime = (await stat(FILE)).mtimeMs;
+  } catch {
+    memMtime = Date.now();
+  }
+}
+
+function mutate<T>(fn: (db: DB) => T): Promise<T> {
+  const run = writeChain.then(async () => {
+    const db = await load();
+    const result = fn(db);
+    await persist(db);
+    return result;
+  });
+  writeChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+export async function listEnvironments(): Promise<Environment[]> {
+  const db = await load();
+  return Object.values(db.environments).sort((a, b) =>
+    a.created_at < b.created_at ? 1 : -1,
+  );
+}
+
+export async function getEnvironment(id: string): Promise<Environment | null> {
+  const db = await load();
+  return db.environments[id] ?? null;
+}
+
+export async function putEnvironment(env: Environment): Promise<Environment> {
+  return mutate((db) => {
+    db.environments[env.id] = env;
+    return env;
+  });
+}
+
+export async function getMatch(id: string): Promise<Match | null> {
+  const db = await load();
+  return db.matches[id] ?? null;
+}
+
+export async function putMatch(match: Match): Promise<Match> {
+  return mutate((db) => {
+    db.matches[match.id] = match;
+    return match;
+  });
+}
+
+export async function appendStep(step: StepRecord): Promise<StepRecord> {
+  return mutate((db) => {
+    const list = db.steps[step.match_id] ?? [];
+    list.push(step);
+    db.steps[step.match_id] = list;
+    return step;
+  });
+}
+
+export async function listSteps(matchId: string): Promise<StepRecord[]> {
+  const db = await load();
+  return db.steps[matchId] ?? [];
+}
+
+export async function listMatches(environmentId?: string): Promise<Match[]> {
+  const db = await load();
+  return Object.values(db.matches)
+    .filter((m) => !environmentId || m.environment_id === environmentId)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+export async function replaceMatchAndStep(
+  match: Match,
+  step: StepRecord,
+): Promise<{ match: Match; step: StepRecord }> {
+  return mutate((db) => {
+    db.matches[match.id] = match;
+    const list = db.steps[match.id] ?? [];
+    list.push(step);
+    db.steps[match.id] = list;
+    return { match, step };
+  });
+}

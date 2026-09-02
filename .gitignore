@@ -48,3 +48,6 @@ next-env.d.ts
 
 # credentials
 /secrets/
+
+# local store
+/.data/

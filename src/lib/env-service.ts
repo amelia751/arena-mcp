@@ -1,0 +1,288 @@
+import { CODE_KEYS, EMPTY_CODE, type EnvCode, type EnvCodePatch, type Environment } from "./types";
+import { codeHash, nid, now } from "./ids";
+import { getEnvironment, listEnvironments, putEnvironment } from "./store";
+import { validateEnvironment } from "./validate";
+import { AUTHORING_GUIDE } from "./guide";
+import { withRealm } from "./sandbox";
+
+function mergeCode(base: EnvCode, patch?: EnvCodePatch): EnvCode {
+  const next = { ...base };
+  if (!patch) return next;
+  for (const k of CODE_KEYS) {
+    if (typeof patch[k] === "string") next[k] = patch[k] as string;
+  }
+  return next;
+}
+
+function publicEnv(env: Environment) {
+  return {
+    id: env.id,
+    name: env.name,
+    description: env.description,
+    players: env.players,
+    revision: env.revision,
+    code_hash: env.code_hash,
+    published: env.published,
+    confirmed_info_flow: env.confirmed_info_flow,
+    validation: env.validation
+      ? {
+          ok: env.validation.ok,
+          failures: env.validation.failures,
+          checks: env.validation.checks,
+          info_flow: env.validation.info_flow,
+          playouts: env.validation.playouts,
+        }
+      : null,
+    created_at: env.created_at,
+    updated_at: env.updated_at,
+  };
+}
+
+export function getAuthoringGuide() {
+  return { guide: AUTHORING_GUIDE, example_id: "env_tictactoe" };
+}
+
+export async function listEnvs() {
+  const rows = await listEnvironments();
+  return { environments: rows.map(publicEnv) };
+}
+
+export async function getEnv(id: string, fn?: keyof EnvCode) {
+  const env = await getEnvironment(id);
+  if (!env) return { error: "environment not found", status: 404 as const };
+  if (fn) {
+    if (!CODE_KEYS.includes(fn)) return { error: `unknown function ${fn}`, status: 400 as const };
+    return {
+      id: env.id,
+      revision: env.revision,
+      function: fn,
+      source: env.code[fn],
+    };
+  }
+  return {
+    ...publicEnv(env),
+    code: env.code,
+  };
+}
+
+export async function createEnv(input: {
+  name: string;
+  description?: string;
+  players?: number;
+  code?: EnvCodePatch;
+}) {
+  if (!input.name?.trim()) return { error: "name is required", status: 400 as const };
+  const code = mergeCode(EMPTY_CODE, input.code);
+  const players = input.players ?? 2;
+  const validation = await safeValidate(code, players, false);
+  const t = now();
+  const env: Environment = {
+    id: nid("env"),
+    name: input.name.trim(),
+    description: input.description?.trim() || "",
+    players,
+    code,
+    revision: 1,
+    code_hash: codeHash(code),
+    published: false,
+    confirmed_info_flow: false,
+    validation,
+    created_at: t,
+    updated_at: t,
+  };
+  await putEnvironment(env);
+  return { environment: { ...publicEnv(env), code: env.code } };
+}
+
+export async function updateEnv(input: {
+  id: string;
+  expected_revision: number;
+  name?: string;
+  description?: string;
+  code?: EnvCodePatch;
+}) {
+  const env = await getEnvironment(input.id);
+  if (!env) return { error: "environment not found", status: 404 as const };
+  if (env.published) {
+    return {
+      error: "published environments are immutable — fork_environment instead",
+      status: 409 as const,
+    };
+  }
+  if (env.revision !== input.expected_revision) {
+    return {
+      error: `revision conflict: have ${env.revision}, expected ${input.expected_revision}`,
+      status: 409 as const,
+    };
+  }
+  const code = mergeCode(env.code, input.code);
+  const validation = await safeValidate(code, env.players, false);
+  const next: Environment = {
+    ...env,
+    name: input.name?.trim() || env.name,
+    description: input.description !== undefined ? input.description : env.description,
+    code,
+    revision: env.revision + 1,
+    code_hash: codeHash(code),
+    validation,
+    updated_at: now(),
+  };
+  await putEnvironment(next);
+  return { environment: { ...publicEnv(next), code: next.code } };
+}
+
+export async function forkEnv(input: { source_id: string; name: string }) {
+  const src = await getEnvironment(input.source_id);
+  if (!src) return { error: "source environment not found", status: 404 as const };
+  if (!input.name?.trim()) return { error: "name is required", status: 400 as const };
+  const t = now();
+  const env: Environment = {
+    ...src,
+    id: nid("env"),
+    name: input.name.trim(),
+    published: false,
+    confirmed_info_flow: false,
+    revision: 1,
+    created_at: t,
+    updated_at: t,
+  };
+  env.validation = await safeValidate(env.code, env.players, false);
+  await putEnvironment(env);
+  return { environment: { ...publicEnv(env), code: env.code, forked_from: src.id } };
+}
+
+export async function validateEnv(id: string, episodes?: number, publish = false) {
+  const env = await getEnvironment(id);
+  if (!env) return { error: "environment not found", status: 404 as const };
+  const validation = await safeValidate(env.code, env.players, publish, episodes);
+  const next = { ...env, validation, updated_at: now() };
+  await putEnvironment(next);
+  return { id: next.id, revision: next.revision, validation };
+}
+
+export async function publishEnv(input: {
+  id: string;
+  expected_revision: number;
+  confirm_info_flow?: boolean;
+}) {
+  const env = await getEnvironment(input.id);
+  if (!env) return { error: "environment not found", status: 404 as const };
+  if (env.revision !== input.expected_revision) {
+    return {
+      error: `revision conflict: have ${env.revision}, expected ${input.expected_revision}`,
+      status: 409 as const,
+    };
+  }
+  const validation = await safeValidate(env.code, env.players, true);
+  if (!validation.ok) {
+    return {
+      error: "publish blocked — validation failed",
+      validation,
+      status: 400 as const,
+    };
+  }
+  const next: Environment = {
+    ...env,
+    validation,
+    published: true,
+    confirmed_info_flow: input.confirm_info_flow || env.confirmed_info_flow || true,
+    updated_at: now(),
+  };
+  await putEnvironment(next);
+  return {
+    environment: publicEnv(next),
+    url: `/e/${next.id}`,
+  };
+}
+
+export async function describeDataset(id: string) {
+  const env = await getEnvironment(id);
+  if (!env) return { error: "environment not found", status: 404 as const };
+  const validation = env.validation ?? (await safeValidate(env.code, env.players, false, 80));
+  let sample = validation.sample_step;
+  if (!sample) {
+    try {
+      sample = await withRealm(env.code, (realm) => {
+        const p = realm.call<{
+          last_obs?: unknown;
+          last_legal?: string[];
+          last_seat?: number;
+          actions?: string[];
+          rewards?: number[];
+        }>("__playout", { seed: 0, policy_seed: 1, max_steps: 40, collect: true });
+        return {
+          observation: p.last_obs,
+          legal_actions: p.last_legal,
+          seat: p.last_seat,
+          action: p.actions?.at(-1),
+          reward: 0,
+          terminal: true,
+        };
+      });
+    } catch {
+      sample = undefined;
+    }
+  }
+  return {
+    environment_id: env.id,
+    code_hash: env.code_hash,
+    schema_version: "arena-1",
+    episode: {
+      type: "episode",
+      fields: ["match_id", "environment", "seed", "seats", "returns", "length"],
+    },
+    step: {
+      type: "step",
+      fields: [
+        "observation",
+        "legal_actions",
+        "action",
+        "reward",
+        "terminal",
+        "presented_order",
+        "latency_ms",
+        "rationale",
+        "confidence",
+      ],
+      observation_example: sample?.observation ?? null,
+      action_space_example: sample?.legal_actions ?? [],
+      reward_range: "zero-sum, typically -1..1 per seat at terminal, 0 otherwise",
+    },
+    playouts: validation.playouts ?? null,
+    sample_row: sample
+      ? {
+          type: "step",
+          ...sample,
+          interface: "webmcp",
+          rationale: null,
+          confidence: null,
+        }
+      : null,
+  };
+}
+
+async function safeValidate(
+  code: EnvCode,
+  players: number,
+  publish: boolean,
+  episodes?: number,
+) {
+  try {
+    return await validateEnvironment(code, { players, publish, episodes });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      checks: [
+        {
+          id: "V0" as const,
+          ok: false,
+          summary: "Does not run",
+          detail: message,
+        },
+      ],
+      failures: [`V0: ${message}`],
+      info_flow: [],
+    };
+  }
+}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { GameView } from "./GameView";
 import type { AuthoredView } from "@/lib/view";
 import { registerDesk, type SessionMatch } from "@/lib/session";
+import { playerName } from "@/lib/seats";
 
 const subscribeNothing = () => () => {};
 const hasModelContext = () =>
@@ -228,7 +229,7 @@ export function PlayDesk({
           }
         >
           {!match
-            ? `You are seat ${humanSeat} · seat ${agentSeat} is ${opponent === "agent" ? "the agent" : "the bot"}`
+            ? `You are ${playerName(humanSeat)} · ${playerName(agentSeat)} is ${opponent === "agent" ? "the agent" : "the bot"}`
             : match.terminal
               ? `Over · ${match.rewards.map((r) => (r > 0 ? `+${r}` : r)).join(" / ")}`
               : yourTurn
@@ -247,7 +248,7 @@ export function PlayDesk({
             {opponent === "agent" ? "Opponent: agent" : "Opponent: bot"}
           </button>
           <button type="button" className="pill" onClick={() => void start()} disabled={busy}>
-            {match ? "Deal again" : "Sit down"}
+            {match ? "Deal again" : "Start playing"}
           </button>
         </div>
       </div>

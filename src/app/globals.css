@@ -94,6 +94,10 @@ a {
   margin-top: 2rem;
 }
 
+.card-grid + .section-label {
+  margin-top: 2rem;
+}
+
 .blank-line {
   margin: 0 0 0.85rem;
   font-size: 0.875rem;

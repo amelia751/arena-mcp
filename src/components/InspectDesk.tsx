@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { GameView } from "./GameView";
 import type { AuthoredView } from "@/lib/view";
 import { CODE_KEYS, type EnvCode } from "@/lib/types";
+import { playerName } from "@/lib/seats";
 
 type Preview = {
   seed: number;
@@ -108,14 +109,14 @@ export function InspectDesk({
             className={pinned === 0 ? "pill on" : "pill"}
             onClick={() => setPinned(0)}
           >
-            Seat 0
+            {playerName(0)}
           </button>
           <button
             type="button"
             className={pinned === 1 ? "pill on" : "pill"}
             onClick={() => setPinned(1)}
           >
-            Seat 1
+            {playerName(1)}
           </button>
         </div>
         <div className="desk-actions">
@@ -173,14 +174,14 @@ export function InspectDesk({
           <p className="note">
             {data
               ? data.to_move === seat
-                ? "Seat " + seat + " is to move. Click the board to play it forward."
-                : `Seat ${data.to_move} is to move — this is what seat ${seat} can see while they wait.`
+                ? `${playerName(seat)} is to move. Click the board to play it forward.`
+                : `${playerName(data.to_move)} is to move — this is what ${playerName(seat)} can see while they wait.`
               : ""}
           </p>
         </div>
 
         <div className="inspect-data">
-          <p className="kicker">What seat {seat} is handed</p>
+          <p className="kicker">What {playerName(seat)} is handed</p>
           {fields.length > 0 ? (
             <table className="shape">
               <tbody>
@@ -209,7 +210,7 @@ export function InspectDesk({
                     {a}
                   </button>
                 ))
-              : "none — it is not this seat's move"}
+              : "none — it is not this player's move"}
           </p>
 
           <p className="kicker">Line played</p>

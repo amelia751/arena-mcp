@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { EnvCard } from "./EnvCard";
 import { registerLive } from "@/lib/live";
 
-type Card = { id: string; name: string; description: string };
+type Card = { id: string; name: string; description: string; published?: boolean };
 
 async function loadCards(): Promise<Card[]> {
   const res = await fetch("/api/environments", { cache: "no-store" });
@@ -76,9 +76,22 @@ export function Gallery() {
     );
   }
 
+  const published = games.filter((env) => env.published);
+  const drafts = games.filter((env) => !env.published);
+
   return (
     <section className="gallery">
-      <p className="section-label">Made here</p>
+      <Shelf label="Published" games={published} />
+      <Shelf label="Drafts" games={drafts} />
+    </section>
+  );
+}
+
+function Shelf({ label, games }: { label: string; games: Card[] }) {
+  if (games.length === 0) return null;
+  return (
+    <>
+      <p className="section-label">{label}</p>
       <ul className="card-grid">
         {games.map((env) => (
           <li key={env.id}>
@@ -86,6 +99,6 @@ export function Gallery() {
           </li>
         ))}
       </ul>
-    </section>
+    </>
   );
 }

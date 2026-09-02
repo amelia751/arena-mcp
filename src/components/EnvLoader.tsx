@@ -93,8 +93,8 @@ export function EnvInspect({ id }: { id: string }) {
       {(env) => (
         <>
           <p className="note">
-            Walk the game without playing it. Switch seats at the same position to see exactly what
-            each side is told — in a game with hidden cards, the two views should not match.
+            Walk the game without playing it. Switch players at the same position to see exactly
+            what each side is told — in a game with hidden cards, the two views should not match.
           </p>
           <InspectDesk environmentId={env.id} code={env.code} />
         </>
@@ -110,7 +110,7 @@ export function EnvData({ id }: { id: string }) {
         <>
           <div className="data-bar">
             <p className="note">
-              What a match on this table writes down, and what each seat is allowed to know.
+              What a match on this table writes down, and what each player is allowed to know.
             </p>
             <RevalidateButton id={env.id} />
           </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CheckResult, InfoFlowRow, ValidationReport } from "@/lib/types";
+import { playerName } from "@/lib/seats";
 
 /** The check ids are internal. This is what each one actually proves. */
 const CHECK_NAMES: Record<CheckResult["id"], string> = {
@@ -13,7 +14,7 @@ const CHECK_NAMES: Record<CheckResult["id"], string> = {
   V5: "No hidden-state leaks",
   V6: "Table renders",
   V7: "Table paints the observation",
-  V8: "Each seat sees its own deal",
+  V8: "Each player sees their own deal",
 };
 
 type Dataset = {
@@ -162,8 +163,8 @@ function Coverage({ coverage }: { coverage: ValidationReport["render_coverage"] 
       {dark.length === 0 ? (
         // Listing forty rows that all say "drawn" buries the one case that matters.
         <p className="note">
-          Every field the observation hands a seat is painted somewhere on the table, so nothing is
-          being played blind.
+          Every field the observation hands a player is painted somewhere on the table, so nothing
+          is being played blind.
         </p>
       ) : (
         <>
@@ -216,7 +217,7 @@ export function FlowMatrix({ rows, players }: { rows: InfoFlowRow[]; players: nu
             <tr>
               <th>field</th>
               {Array.from({ length: players }).map((_, i) => (
-                <th key={i}>seat {i}</th>
+                <th key={i}>{playerName(i)}</th>
               ))}
             </tr>
           </thead>
@@ -235,20 +236,20 @@ export function FlowMatrix({ rows, players }: { rows: InfoFlowRow[]; players: nu
         </table>
       ) : (
         <p className="note">
-          Nothing is dealt here — both seats are handed the same {shared.length} fields, which is
+          Nothing is dealt here — both players are handed the same {shared.length} fields, which is
           what a game of perfect information should look like.
         </p>
       )}
       {worth.length > 0 && (
         <p className="note">
           {leaks.length > 0
-            ? "A leak means a seat is being handed something it should not know. Fix observe() before publishing."
-            : `${split.length} field${split.length === 1 ? "" : "s"} differ by seat, which is the hidden information this game is built on.`}
+            ? "A leak means a player is being handed something they should not know. Fix observe() before publishing."
+            : `${split.length} field${split.length === 1 ? "" : "s"} differ by player, which is the hidden information this game is built on.`}
         </p>
       )}
       {internal.length > 0 && (
         <p className="note">
-          Kept from both seats: {internal.map((r) => r.field).join(", ")} — internal bookkeeping
+          Kept from both players: {internal.map((r) => r.field).join(", ")} — internal bookkeeping
           observe() never hands out.
         </p>
       )}
@@ -261,11 +262,11 @@ function SampleRow({ row }: { row: Record<string, unknown> | null }) {
   return (
     <div className="tape">
       <div className="tape-head">
-        <span>One recorded step</span>
+        <span>Sample data</span>
       </div>
       <p className="note">
         A real row from a playout, in the shape every move lands in — whether a person clicked it or
-        an agent called take_action.
+        an agent called take_action. Player 1 is seat 0 in the file.
       </p>
       <pre className="code-block">{JSON.stringify(row, null, 2)}</pre>
     </div>

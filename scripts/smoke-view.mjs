@@ -3,10 +3,15 @@
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { CONNECT_FOUR, KUHN, TICTACTOE, forget, seed } from "./fixtures.mjs";
 
 const BASE = process.argv[2] || process.env.ARENA_BASE || "http://localhost:3000";
 const OUT = path.join(process.cwd(), ".data", "smoke");
 mkdirSync(OUT, { recursive: true });
+
+const c4 = await seed(BASE, CONNECT_FOUR);
+const ttt = await seed(BASE, TICTACTOE);
+const kuhn = await seed(BASE, KUHN);
 
 const browser = await chromium.launch({
   headless: true,
@@ -37,10 +42,10 @@ async function call(name, args) {
 }
 
 for (const [label, args] of [
-  ["connect four, empty", { environment_id: "env_connect_four" }],
-  ["connect four, mid-game", { environment_id: "env_connect_four", moves: ["col_3", "col_4", "col_3", "col_2"] }],
-  ["tic tac toe, mid-game", { environment_id: "env_tictactoe", moves: ["cell_4", "cell_0", "cell_8"] }],
-  ["kuhn poker", { environment_id: "env_kuhn" }],
+  ["connect four, empty", { environment_id: c4 }],
+  ["connect four, mid-game", { environment_id: c4, moves: ["col_3", "col_4", "col_3", "col_2"] }],
+  ["tic tac toe, mid-game", { environment_id: ttt, moves: ["cell_4", "cell_0", "cell_8"] }],
+  ["kuhn poker", { environment_id: kuhn }],
   ["a bad draft", { html: "<div class='b'><div data-action='col_0'></div><div data-action='col_1'></div></div>", css: ".b{display:flex}.b div{width:8px;height:8px;background:#eee}" }],
 ]) {
   console.log(`\n${"=".repeat(72)}\n${label}\n${"=".repeat(72)}`);
@@ -48,9 +53,9 @@ for (const [label, args] of [
 }
 
 console.log(`\n${"=".repeat(72)}\nlive table: open_environment + start_match + inspect_view\n${"=".repeat(72)}`);
-console.log(await call("open_environment", { id: "env_connect_four" }));
+console.log(await call("open_environment", { id: c4 }));
 console.log("\n--- start_match ---");
-console.log(await call("start_match", { environment_id: "env_connect_four", agent_label: "smoke" }));
+console.log(await call("start_match", { environment_id: c4, agent_label: "smoke" }));
 await page.waitForTimeout(600);
 await page.screenshot({ path: path.join(OUT, "live-table.png") });
 console.log("\n--- inspect_view ---");
@@ -93,5 +98,6 @@ for (const [what, args, expected] of [
 }
 
 await browser.close();
+await forget([c4, ttt, kuhn]);
 console.log(failures ? `\n${failures} failed` : "\nthe report says what a person would say");
 process.exit(failures ? 1 : 0);

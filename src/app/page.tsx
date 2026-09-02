@@ -4,29 +4,32 @@ import { EnvCard } from "@/components/EnvCard";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const all = await listEnvironments();
-  const authored = all.filter((e) => e.kind === "authored");
-  const patterns = all.filter((e) => e.kind === "template");
+  const games = await listEnvironments();
+
+  if (games.length === 0) {
+    return (
+      <main>
+        <section className="blank">
+          <h1>Nothing here yet.</h1>
+          <p>
+            This page has no games of its own. Every table on it gets written from scratch by an
+            agent working alongside you — the rules, the board, and the way it looks.
+          </p>
+          <p className="blank-hint">
+            Open this page in a browser that speaks to your assistant, then ask it to design
+            something and play you.
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main>
-      {authored.length > 0 ? (
-        <section className="gallery">
-          <p className="section-label">Today</p>
-          <ul className="card-grid">
-            {authored.map((env) => (
-              <li key={env.id}>
-                <EnvCard env={env} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       <section className="gallery">
-        {authored.length > 0 ? <p className="section-label">More</p> : null}
+        <p className="section-label">Made here</p>
         <ul className="card-grid">
-          {patterns.map((env) => (
+          {games.map((env) => (
             <li key={env.id}>
               <EnvCard env={env} />
             </li>

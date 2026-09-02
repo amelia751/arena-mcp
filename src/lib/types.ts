@@ -49,7 +49,7 @@ export type Environment = {
   code: EnvCode;
   revision: number;
   code_hash: string;
-  kind: "template" | "authored";
+  kind: "authored";
   published: boolean;
   confirmed_info_flow: boolean;
   validation: ValidationReport | null;

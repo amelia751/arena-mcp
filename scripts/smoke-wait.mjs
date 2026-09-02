@@ -1,5 +1,7 @@
 // wait_for_turn has to wait for a turn, not for a revision. An agent that asks
 // while the board is already its own must be answered, not left holding.
+import { TICTACTOE, forget, seed } from "./fixtures.mjs";
+
 const BASE = process.env.ARENA_BASE || "http://localhost:3000";
 const j = (p, init) => fetch(BASE + p, init).then((r) => r.json());
 const post = (p, b) =>
@@ -11,7 +13,8 @@ function check(what, ok, detail = "") {
   console.log(`${ok ? "ok  " : "FAIL"} ${what}${detail ? ` — ${detail}` : ""}`);
 }
 
-const m = await post("/api/matches", { environment_id: "env_tictactoe", human_seat: 0 });
+const env = await seed(BASE, TICTACTOE);
+const m = await post("/api/matches", { environment_id: env, human_seat: 0 });
 const id = m.match_id ?? m.match?.id;
 const rev0 = m.revision ?? m.match?.revision ?? 1;
 check("a match starts", Boolean(id), JSON.stringify(m).slice(0, 160));
@@ -46,5 +49,6 @@ check(
   theirs.status,
 );
 
+await forget([env]);
 console.log(failures ? `\n${failures} failed` : "\nall good");
 process.exit(failures ? 1 : 0);

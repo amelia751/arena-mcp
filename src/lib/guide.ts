@@ -67,8 +67,8 @@ Everything beyond that is a design decision, and it is yours.
 
 Design this game as itself. A trading card game should not look like a board game, and a dice
 game should not look like either. Work out what the real object would be — felt, paper, plastic,
-a lit screen — and build that thing. If you forked a pattern or read another environment, do not
-carry its look across; you inherited its rules, not its table.
+a lit screen — and build that thing. If you forked another environment, do not carry its look
+across; you inherited its rules, not its table.
 
 preview_view tells you the colours and width of the page your table is mounted on. Harmonize
 with it or contrast with it deliberately, but decide rather than guess.

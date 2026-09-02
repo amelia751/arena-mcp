@@ -3,11 +3,14 @@
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { CONNECT_FOUR, forget, seed } from "./fixtures.mjs";
 
 const BASE = process.argv[2] || process.env.ARENA_BASE || "http://localhost:3000";
-const ENV = process.argv[3] || "env_connect_four";
 const OUT = path.join(process.cwd(), ".data", "smoke");
 mkdirSync(OUT, { recursive: true });
+
+const ENV = process.argv[3] || (await seed(BASE, CONNECT_FOUR));
+const seeded = process.argv[3] ? [] : [ENV];
 
 const browser = await chromium.launch({
   headless: true,
@@ -97,3 +100,4 @@ for (const l of lines) {
 }
 
 await browser.close();
+await forget(seeded);

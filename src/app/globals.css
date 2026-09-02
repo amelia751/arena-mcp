@@ -94,6 +94,32 @@ a {
   margin-top: 2rem;
 }
 
+.blank {
+  max-width: 34rem;
+  padding: 3.5rem 0 0;
+}
+
+.blank h1 {
+  font-family: var(--font-cheltenham), Georgia, "Times New Roman", serif;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+  color: var(--ink);
+}
+
+.blank p {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.blank-hint {
+  color: var(--muted);
+  font-size: 0.95rem !important;
+}
+
 .game-card {
   display: flex;
   flex-direction: column;

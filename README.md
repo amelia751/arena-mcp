@@ -17,8 +17,8 @@ Open http://localhost:3000 and ask an agent to design a game. It writes the rule
 both. The guide hands over the contract and the sandbox rules and nothing else — no palette, no
 worked example, no catalogue to copy from. The contract is the ordinary one, close enough to
 OpenSpiel or PettingZoo that a model can write against it from what it already knows, so what
-lands on the page is authored rather than assembled. Three games ship with it to play against;
-they keep their `render()` to themselves.
+lands on the page is authored rather than assembled. Nothing ships with it: the page starts
+empty, and every game on it was written there.
 
 ## The environment contract
 

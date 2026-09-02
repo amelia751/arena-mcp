@@ -120,9 +120,7 @@ const TASKS = {
 Rules: 6 rows, 7 columns, gravity so discs fall to the lowest empty slot, four in a row wins
 (horizontal, vertical or either diagonal). Actions are col_0 through col_6.
 
-Write all five functions yourself. Do not fork or read env_connect_four — that is a different
-implementation and copying it defeats the point. env_tictactoe is fine to read as a pattern for
-the shape of the five functions.
+Write all five functions yourself.
 
 I care about how the table looks. Make it a felt board with real discs, and use preview_view with
 moves to check the board mid-game before you decide it is done. When every check passes and the
@@ -139,11 +137,10 @@ Three cards (Jack, Queen, King), one dealt to each player, one burned. Each play
 to showdown, higher card wins the pot. Folding loses what you put in.
 
 The important part: observe() must show a player only their own card. Never both hands, never the
-burned card. Write all five functions yourself — do not fork env_kuhn. Make the table show a real
-playing card. Check it with preview_view, publish it, then start a match and play me.`,
+burned card. Write all five functions yourself. Make the table show a real playing card. Check it with preview_view, publish it, then start a match and play me.`,
 
-  // Deliberately says nothing about how it should look, and describes a game no
-  // pattern on the page resembles: the design has to come from the agent.
+  // Deliberately says nothing about how it should look: the design has to come
+  // from the agent.
   pokemon: `Design a two-player Pokemon-style trading card duel as a new environment on this page,
 then play me.
 

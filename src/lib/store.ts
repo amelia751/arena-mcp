@@ -2,7 +2,6 @@ import "server-only";
 import { mkdir, readFile, rename, stat, writeFile } from "fs/promises";
 import path from "path";
 import type { Environment, Match, StepRecord } from "./types";
-import { referenceEnvironments } from "./refs";
 
 export type DB = {
   environments: Record<string, Environment>;
@@ -22,21 +21,16 @@ let mem: DB | null = null;
 let memMtime = 0;
 let writeChain: Promise<void> = Promise.resolve();
 
+/** Nothing ships with the page. Every game here was written by somebody. */
 function empty(): DB {
-  const environments: Record<string, Environment> = {};
-  for (const e of referenceEnvironments()) environments[e.id] = e;
-  return { environments, matches: {}, steps: {} };
+  return { environments: {}, matches: {}, steps: {} };
 }
 
 function reconcile(db: DB): DB {
   db.environments = db.environments ?? {};
   db.matches = db.matches ?? {};
   db.steps = db.steps ?? {};
-  const templates = new Set(referenceEnvironments().map((e) => e.id));
-  for (const e of referenceEnvironments()) db.environments[e.id] = e;
-  for (const [id, row] of Object.entries(db.environments)) {
-    if (!templates.has(id)) row.kind = "authored";
-  }
+  for (const row of Object.values(db.environments)) row.kind = "authored";
   return db;
 }
 

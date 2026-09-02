@@ -203,6 +203,58 @@ globalThis.__playout = function (j) {
   var a = JSON.parse(j);
   return JSON.stringify(__one(a.seed, a.policy_seed, a.max_steps || 200, !!a.collect));
 };
+// Step through a game one move at a time and record what each function saw, so a
+// broken rule set can be read like a stack trace instead of guessed at.
+globalThis.__trace = function (j) {
+  var a = JSON.parse(j);
+  var want = a.actions || [];
+  var max = a.max_steps || 12;
+  var cursor = a.policy_seed == null ? 7 : a.policy_seed;
+  var rows = [];
+  var state;
+  try { state = init(a.seed || 0); }
+  catch (e) { return JSON.stringify({ rows: rows, stopped: "init threw: " + String(e && e.message || e) }); }
+  if (state == null || typeof state !== "object") {
+    return JSON.stringify({ rows: rows, stopped: "init did not return an object" });
+  }
+  for (var n = 0; n < max; n++) {
+    var row = { n: n, state: __brief(state) };
+    var seat = state.to_move;
+    row.seat = seat;
+    if (typeof seat !== "number") {
+      row.error = "state.to_move is " + __brief(seat) + ", which is not a seat number";
+      rows.push(row); return JSON.stringify({ rows: rows, stopped: "init/step" });
+    }
+    try { row.legal = legal_actions(state, seat); }
+    catch (e) { row.error = "legal_actions threw: " + String(e && e.message || e); rows.push(row); return JSON.stringify({ rows: rows, stopped: "legal_actions" }); }
+    if (!Array.isArray(row.legal)) { row.error = "legal_actions did not return an array"; rows.push(row); return JSON.stringify({ rows: rows, stopped: "legal_actions" }); }
+    try { row.observation = __brief(observe(state, seat)); }
+    catch (e) { row.error = "observe threw: " + String(e && e.message || e); rows.push(row); return JSON.stringify({ rows: rows, stopped: "observe" }); }
+    if (!row.legal.length) { row.error = "no legal actions here, and the game has not ended"; rows.push(row); return JSON.stringify({ rows: rows, stopped: "legal_actions" }); }
+    var action;
+    if (n < want.length) {
+      action = want[n];
+      if (row.legal.indexOf(action) < 0) {
+        row.action = action;
+        row.error = "you asked for " + action + ", which is not legal here";
+        rows.push(row); return JSON.stringify({ rows: rows, stopped: "illegal action requested" });
+      }
+    } else {
+      action = row.legal[Math.floor(rng(cursor++) * row.legal.length)];
+    }
+    row.action = action;
+    var r;
+    try { r = step(state, action); }
+    catch (e) { row.error = "step threw: " + String(e && e.message || e); rows.push(row); return JSON.stringify({ rows: rows, stopped: "step" }); }
+    if (!r || typeof r !== "object" || !r.state) { row.error = "step did not return { state, rewards, terminal }"; rows.push(row); return JSON.stringify({ rows: rows, stopped: "step" }); }
+    row.rewards = r.rewards;
+    row.terminal = !!r.terminal;
+    rows.push(row);
+    state = r.state;
+    if (r.terminal) return JSON.stringify({ rows: rows, stopped: "the game ended", final: __brief(state) });
+  }
+  return JSON.stringify({ rows: rows, stopped: "reached the step limit without ending", final: __brief(state) });
+};
 globalThis.__sweep = function (j) {
   var a = JSON.parse(j);
   var n = a.n || 300, max = a.max_steps || 200;

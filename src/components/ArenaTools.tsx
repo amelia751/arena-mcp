@@ -150,6 +150,10 @@ export function ArenaTools() {
 
     const deskMatch = () => currentDesk()?.match() ?? null;
 
+    // Publishing is the claim that the table is good, and you cannot make that
+    // claim about markup you never looked at. Records the revision last seen.
+    const looked = new Map<string, number>();
+
     const tools: Array<{
       name: string;
       description: string;
@@ -170,7 +174,7 @@ export function ArenaTools() {
       {
         name: "list_environments",
         description:
-          "List environments authored on this page, plus fork templates (env_tictactoe, env_connect_four, env_kuhn) that exist as patterns to copy.",
+          "List the environments that exist on this page, with their validation state and whether each is published.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async () => clip(await api("/api/environments")),
@@ -231,7 +235,7 @@ export function ArenaTools() {
       {
         name: "fork_environment",
         description:
-          "Copy an existing environment into a new draft you can edit. A good starting point when the new game shares a shape with one that already works.",
+          "Copy an environment into a new draft you can edit — the way to revise something already published, since publishing freezes it.",
         inputSchema: {
           type: "object",
           properties: {
@@ -310,6 +314,48 @@ export function ArenaTools() {
           ),
       },
       {
+        name: "trace_episode",
+        description:
+          "Step through your game one move at a time and see what each function saw: the state, the legal actions, the observation, the action applied, and the rewards. Pass actions to drive it down a specific line, or leave it out to let it play itself. This is how you find out why a playout failed.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            seed: { type: "integer", description: "Which deal to walk. Quote the seed a failure reported." },
+            actions: {
+              type: "array",
+              items: { type: "string" },
+              description: "Play these in order, then continue at random. Reproduces a specific line.",
+            },
+            max_steps: { type: "integer", description: "How many moves to walk. Default 12." },
+          },
+          required: ["id"],
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: async ({ id, ...rest }) => {
+          const res = await api(`/api/environments/${id}/trace`, {
+            method: "POST",
+            body: JSON.stringify(rest),
+          });
+          if (res.error) return clip(res);
+          const rows: Array<Record<string, unknown>> = res.rows ?? [];
+          if (!rows.length) return `Nothing ran. ${res.stopped ?? ""}`.trim();
+          const out: string[] = [`seed ${res.seed} — ${rows.length} move(s), then: ${res.stopped}`, ""];
+          for (const r of rows) {
+            out.push(`step ${r.n} · seat ${r.seat}`);
+            out.push(`  state: ${r.state}`);
+            if (Array.isArray(r.legal)) out.push(`  legal: ${r.legal.join(" ") || "(none)"}`);
+            if (r.observation !== undefined) out.push(`  observe: ${r.observation}`);
+            if (r.action !== undefined) out.push(`  played: ${r.action}`);
+            if (r.rewards !== undefined) out.push(`  rewards: ${JSON.stringify(r.rewards)}${r.terminal ? " (ended)" : ""}`);
+            if (r.error) out.push(`  BROKE HERE: ${r.error}`);
+          }
+          if (res.final) out.push("", `final state: ${res.final}`);
+          return clip(out.join("\n"), 4000);
+        },
+      },
+      {
         name: "preview_view",
         description:
           "Look at the table. Mounts markup and describes what actually painted — the board as a character grid with real colours, every control and its size, and any layout problem. Pass html+css to try a draft, or environment_id to see the saved render(). Call this after every markup change.",
@@ -344,6 +390,9 @@ export function ArenaTools() {
             if (Array.isArray(moves) && moves.length) q.set("moves", moves.join(","));
             const res = await api(`/api/environments/${environment_id}/view?${q}`);
             if (res.error) return clip(res);
+            if (res.view && typeof res.revision === "number") {
+              looked.set(String(environment_id), res.revision);
+            }
             if (res.view) view = res.view;
             legal = res.legal_actions;
             where = `${environment_id} render() at seat ${res.seat}${
@@ -394,7 +443,7 @@ export function ArenaTools() {
       {
         name: "publish_environment",
         description:
-          "Publish an environment once every check passes, which mints its shareable page. Takes expected_revision.",
+          "Publish an environment once every check passes, which mints its shareable page. Takes expected_revision. You must have looked at this exact revision with preview_view first.",
         inputSchema: {
           type: "object",
           properties: {
@@ -409,13 +458,20 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ id, ...rest }) =>
-          clip(
+        execute: async ({ id, ...rest }) => {
+          const seen = looked.get(String(id));
+          if (seen !== rest.expected_revision) {
+            return `Publish blocked — you have not looked at revision ${rest.expected_revision} of ${id}. Call preview_view({ environment_id: "${id}", moves: [...] }) and read the picture it returns${
+              seen == null ? "" : ` (you last looked at revision ${seen})`
+            }. A table nobody has looked at is not ready to publish.`;
+          }
+          return clip(
             await writeApi(`/api/environments/${id}/publish`, {
               method: "POST",
               body: JSON.stringify(rest),
             }),
-          ),
+          );
+        },
       },
       {
         name: "open_environment",
@@ -584,7 +640,7 @@ export function ArenaTools() {
       {
         name: "wait_for_turn",
         description:
-          "Hold for up to 8 seconds while the person moves, then return the new position. Returns still_waiting if they have not played yet, which means call it again.",
+          "Hold until it is your turn, up to 8 seconds, then return the position. Returns at once if the board is already yours. Returns still_waiting if the person has not played yet, which means call it again.",
         inputSchema: {
           type: "object",
           properties: {
@@ -605,7 +661,7 @@ export function ArenaTools() {
           if (timeout_ms != null) q.set("timeout_ms", String(timeout_ms));
           const res = await api(`/api/matches/${id}/wait?${q}`);
           if (res.status === "still_waiting") {
-            return `still_waiting — they have not moved since revision ${after}. Call wait_for_turn again; do not stop and wait for a message.`;
+            return `still_waiting — it is their move and they have not played yet (revision ${after}). Call wait_for_turn again; do not stop and wait for a message.`;
           }
           await currentDesk()?.refresh();
           const o = res.observation;

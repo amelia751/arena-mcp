@@ -11,6 +11,7 @@
     "check:play": "node scripts/smoke-play.mjs",
     "check:sandbox": "node scripts/smoke-sandbox.mjs",
     "check:refresh": "node scripts/smoke-refresh.mjs",
+    "check:wait": "node scripts/smoke-wait.mjs",
     "check:webmcp": "node scripts/probe-webmcp.mjs",
     "agent": "node scripts/agent-live.mjs"
   },

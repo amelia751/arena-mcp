@@ -250,7 +250,12 @@ export async function waitForTurn(input: {
   while (Date.now() - start < timeout) {
     const match = await getMatch(input.match_id);
     if (!match) return { error: "match not found", status: 404 as const };
-    if (match.revision > input.after_revision || match.terminal) {
+    // What the caller is waiting for is its own turn, which may already have
+    // arrived. Waiting on a revision bump instead deadlocks a caller that asks
+    // while the board is already its own — nobody else is going to move.
+    const yours = input.seat != null && match.to_move === input.seat;
+    const advanced = input.seat == null && match.revision > input.after_revision;
+    if (yours || advanced || match.terminal) {
       const seat = input.seat ?? match.to_move;
       const view = await observationFor(match, seat);
       return { status: "ready" as const, match: publicMatch(match), observation: view };

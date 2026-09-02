@@ -6,9 +6,16 @@ the look of the table included. Nothing here ships with a design for you to reus
 No modules, no Date, no Math.random, no I/O. The sandbox injects rng(n), a seeded PRNG. If the
 game needs chance, keep a rng_cursor on state and thread it through.
 
+rng is a bare function that is already there. There is nothing to construct, import or seed: no
+new Random(seed), no MersenneTwister, no makeRng — those are not defined and init will throw. Call
+rng(c) directly and advance c yourself.
+
 rng(n) returns a FLOAT between 0 and 1. To pick an index you must write Math.floor(rng(c) * size).
 rng(c) % size is a fraction, indexes nothing, and silently leaves undefined in your state — the
 most common way to ship a card game where nobody has any cards.
+
+  var c = state.rng_cursor;
+  var pick = deck[Math.floor(rng(c++) * deck.length)];
 
 ## The five functions
 
@@ -107,23 +114,38 @@ fourth column, your markup and your state disagree. Always preview mid-game with
 board looks correct even when nothing is wired up. Fix, save, preview again, and keep going until
 problems is empty.
 
-## If you want to see a state machine that works
+## You already know this shape
 
-list_environments names a few patterns. get_environment on one returns its init, legal_actions,
-observe and step so you can see how a rule set is expressed against this contract. They do not
-hand back a render — how a game looks is the part you are here to decide, and forking a pattern
-gives you its rules with the table left blank.
+This is the ordinary way games are written down for machines to play. OpenSpiel splits a game into
+an initial state, the legal actions at a state, an observation per player, and a transition that
+returns rewards and whether the game ended. PettingZoo's turn-based API is the same idea with
+observe() and step(). Whatever you know about expressing a rule set that way applies here — the
+names above are the only thing that is local.
 
-Reach for one only when the shape of the rules is genuinely unclear. A game you can already
-describe, you can already write.
+So write the game from the rules, the way you would anywhere else. There is no catalogue here to
+copy from and you do not need one: a game you can describe, you can write.
+
+## When a check fails, go and look
+
+Validation reports the seed and the position it broke on. Do not guess from the message — walk it:
+
+  trace_episode({ id, seed })                       - step through that deal and watch the state
+  trace_episode({ id, seed, actions: ["bet"] })     - force a line, then carry on at random
+  trace_episode({ id, seed, max_steps: 40 })        - for "did not terminate", watch what stops changing
+
+Each step prints the state, the legal actions, the observation that seat got, the action applied
+and the rewards, and marks the step that broke. A value that is undefined in the state, a seat
+that never gets a legal action, a counter that never advances — you can see all of it here, and
+you cannot see any of it from the error message alone.
 
 ## Order of work
 
 1. create_environment with a name and whatever functions you have. Partial is fine.
-2. Fix whatever validation reports. It names the function and the line.
+2. Fix whatever validation reports. When the cause is not obvious, trace_episode the seed it gave.
 3. Write render, then preview_view. Then preview_view with moves. Then fix. Then again.
 4. update_environment patches one function at a time — quote expected_revision.
-5. When every check passes: describe_dataset, publish_environment.
+5. When every check passes: describe_dataset, then preview_view once more on the revision you
+   are about to ship — publish refuses a revision you have not looked at — then publish_environment.
 6. start_match puts the board on the person's screen with you in the other seat. Then
    get_observation, take_action, wait_for_turn while they think, and inspect_view whenever you
    want to confirm the board shows what you think it shows.

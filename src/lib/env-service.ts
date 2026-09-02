@@ -58,6 +58,43 @@ export function getAuthoringGuide() {
   return { guide: AUTHORING_GUIDE, example_id: "env_tictactoe" };
 }
 
+export type TraceRow = {
+  n: number;
+  seat?: unknown;
+  state?: string;
+  legal?: string[];
+  observation?: string;
+  action?: string;
+  rewards?: number[];
+  terminal?: boolean;
+  error?: string;
+};
+
+/** Walk a game move by move and report what each function saw on the way. */
+export async function traceEnv(
+  id: string,
+  opts: { seed?: number; actions?: string[]; max_steps?: number } = {},
+) {
+  const env = await getEnvironment(id);
+  if (!env) return { error: "environment not found", status: 404 as const };
+  try {
+    return await withRealm(env.code, (realm) => {
+      const out = realm.call<{ rows: TraceRow[]; stopped: string; final?: string }>(
+        "__trace",
+        {
+          seed: opts.seed ?? 0,
+          actions: opts.actions ?? [],
+          max_steps: Math.min(Math.max(opts.max_steps ?? 12, 1), 60),
+        },
+        10000,
+      );
+      return { environment_id: env.id, seed: opts.seed ?? 0, ...out };
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e), status: 400 as const };
+  }
+}
+
 export async function previewEnv(
   id: string,
   opts: { seed?: number; seat?: number; moves?: string[] } = {},
@@ -92,6 +129,7 @@ export async function previewEnv(
         const clean = sanitizeView(parsed.view);
         return {
           environment_id: env.id,
+          revision: env.revision,
           seed,
           seat,
           moves: played,

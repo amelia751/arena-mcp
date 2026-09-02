@@ -157,6 +157,18 @@ Work out the details yourself and write all five functions. observe() must show 
 hand and never the opponent's. Check it with preview_view, including a position part-way through a
 duel, then publish it, start a match against me and play.`,
 
+  // Nothing on the page resembles a bidding game, and the rules are given without a
+  // single hint about presentation: whatever the table looks like, the agent chose it.
+  dice: `Design Liar's Dice for two players as a new environment on this page, then play me.
+
+Each player rolls five dice at the start and can see only their own. Players alternate bids about
+how many dice of a given face are on the table across both hands — each bid must raise the count
+or keep the count and raise the face. Instead of bidding you may challenge the last bid: both hands
+are revealed, and whoever was wrong about it loses.
+
+Work out the rest yourself and write all five functions. observe() must show a player their own
+dice and never the opponent's. Publish it, start a match against me and play.`,
+
   play: `Look at what is already published on this page with list_environments, open the most
 interesting one, start a match against me and play it well. Look at the board with inspect_view
 before each of your moves. When the game is over, export the episodes and tell me what is in them.`,
@@ -366,8 +378,11 @@ async function main() {
     });
 
     if (!calls.length) {
-      // A person at the table would say "go on" rather than close the tab.
-      const live = seen.matchId && !/\bDONE\b/.test(text) && nudges < 3;
+      // A person at the table would say "go on" rather than close the tab. This
+      // applies while it is still writing the game, not only once a match is live:
+      // a turn the model declines to answer is the cheapest thing to recover from.
+      const recited = candidate?.finishReason === "RECITATION";
+      const live = !/\bDONE\b/.test(text) && nudges < 4;
       log({
         event: live ? "nudge" : "stop",
         turn,
@@ -376,12 +391,23 @@ async function main() {
       });
       if (live) {
         nudges++;
-        console.log(`\n[${turn}] no tool calls — nudging (${nudges}/3)`);
+        console.log(
+          `\n[${turn}] no tool calls (${candidate?.finishReason || "none"}) — nudging (${nudges}/4)`,
+        );
         if (text) contents.push({ role: "model", parts: [{ text }] });
         contents.push({
           role: "user",
-          parts: [{ text: "Go on — keep playing. Use the tools; do not wait for me to say anything." }],
+          parts: [
+            {
+              text: recited
+                ? "That reply was withheld for looking like something recited. Write this part yourself instead — your own structure and names, not a well-known implementation — and send it as a single tool call."
+                : seen.matchId
+                  ? "Go on — keep playing. Use the tools; do not wait for me to say anything."
+                  : "Go on — keep building. Use the tools; do not wait for me to say anything.",
+            },
+          ],
         });
+        await new Promise((r) => setTimeout(r, recited ? 2000 : 0));
         continue;
       }
       console.log(`\n[${turn}] no tool calls — finish reason ${candidate?.finishReason}`);

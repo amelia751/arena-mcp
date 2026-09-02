@@ -14,10 +14,11 @@ npm run dev
 ```
 
 Open http://localhost:3000 and ask an agent to design a game. It writes the rules and the table
-both — the guide gives it the contract and the sandbox rules, and says nothing about how a game
-should look. The patterns (`env_tictactoe`, `env_connect_four`, `env_kuhn`) lend their state
-machine to anyone who reads or forks one, and withhold their `render()`, so an authored game's
-appearance is always authored.
+both. The guide hands over the contract and the sandbox rules and nothing else — no palette, no
+worked example, no catalogue to copy from. The contract is the ordinary one, close enough to
+OpenSpiel or PettingZoo that a model can write against it from what it already knows, so what
+lands on the page is authored rather than assembled. Three games ship with it to play against;
+they keep their `render()` to themselves.
 
 ## The environment contract
 
@@ -79,12 +80,13 @@ and every seat can see its own deal without `undefined` in it.
 | `get_authoring_guide` | Contract, sandbox rules, HTML/CSS render rules, the preview loop |
 | `preview_view` | Draw markup, or a saved `render()` at any position, and describe what painted |
 | `inspect_view` | Describe the live table the person is playing on |
-| `list_environments` | Authored environments, plus hidden fork templates |
+| `list_environments` | What exists on the page, with validation state |
 | `get_environment` | Spec and source, optionally one function |
 | `create_environment` | New draft; validation runs immediately |
 | `fork_environment` | Copy a validated environment |
 | `update_environment` | Patch one function |
 | `validate_environment` | V0–V8 plus playouts, as repair text |
+| `trace_episode` | Step through a deal and watch state, legal actions, observation, rewards |
 | `describe_dataset` | Trajectory schema and a sample row |
 | `publish_environment` | Shareable `/e/{id}` if checks pass |
 | `open_environment` | Put an environment's table on the person's screen |

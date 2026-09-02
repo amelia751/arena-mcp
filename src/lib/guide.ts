@@ -34,6 +34,9 @@ observe(state, player) -> observation
   Name secret zones for what they are — hand, deck, held, secret. A check reads those names
   to tell a seat's private cards from the pieces both players can see, so state.players[0].hand
   stays private while state.players[0].active may be shown to everyone.
+  Hand out whatever the table needs to describe the moment, including the fact that the game
+  has ended and who took it. render() can only draw what observe() gives it, and a finished
+  board still announcing someone's turn is a board nobody can read.
 
 step(state, action) -> { state, rewards, terminal }
   rewards is a number[] with one entry per player. Throw if the action is not legal.
@@ -51,7 +54,8 @@ render(observation) -> { html, css }
 - No <script>, no onclick, no url(), no @import, no external images. They are stripped.
 - Draw from the observation. Every cell, card and counter must be read out of the values you
   were handed — never hardcoded. A check rejects markup that does not change when the
-  observation changes, so a hardcoded table will not pass. Include whose turn it is.
+  observation changes, so a hardcoded table will not pass. Say whose turn it is, and when the
+  game is over say that instead — the result belongs on the table, not only in the chat.
 - Size things yourself. Wrap the table in width:max-content so it hugs its contents instead of
   stretching, and put controls on the same grid template as the things they act on.
 

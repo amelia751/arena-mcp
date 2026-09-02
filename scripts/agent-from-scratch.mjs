@@ -269,14 +269,16 @@ Requirements:
 - no Math.random or Date
 - render MUST return { html, css }. A UI tree will fail V6.
 - You write the HTML and CSS. Make it look like a physical felt table: dark green slab, circular holes, gold discs for seat 0, bone discs for seat 1, drop controls above columns with data-action="col_N".
-- After you save render, call preview_view({ environment_id }) and read the snapshot. If data-action ids are missing, fix render.
+- After you save render, call preview_view({ environment_id }). If warnings is non-empty, patch render and preview again. Do not publish until preview_view returns ok:true and warnings:[].
+- Use <button aria-label="Column N">, wrap the table in width:max-content, show whose turn it is.
 - After start_match, call inspect_view, take one action, export_episodes.
 
-Write all five functions yourself with create_environment / update_environment. Fix validation failures. Then describe_dataset, publish, start_match, inspect_view, take one action, export_episodes. Stop when exported.`;
+Write all five functions yourself with create_environment / update_environment. Fix validation failures. Then describe_dataset, publish, start_match, inspect_view, take one action, export_episodes. Stop only when exported AND the last preview_view/inspect_view had no warnings.`;
 
 const contents = [{ role: "user", parts: [{ text: TASK }] }];
 let exported = false;
 let previewed = false;
+let viewClean = false;
 let lastFail = null;
 let lastEnv = null;
 
@@ -339,6 +341,7 @@ for (let turn = 1; turn <= 20; turn++) {
     if (name === "create_environment" && result?.environment?.id) lastEnvId = result.environment.id;
     if (name === "preview_view" || name === "inspect_view") {
       previewed = true;
+      viewClean = !result?.warnings?.length && result?.ok !== false;
       if (result?.actions) console.log("  view actions", result.actions);
       if (result?.warnings?.length) console.log("  view warnings", result.warnings);
       if (result?.screenshot) console.log("  screenshot", result.screenshot);
@@ -351,9 +354,9 @@ for (let turn = 1; turn <= 20; turn++) {
     fnParts.push({ functionResponse: { name, response: { result: clip(result, 8000) } } });
   }
   contents.push({ role: "user", parts: fnParts });
-  if (exported) {
-    console.log("\nFROM-SCRATCH SUCCESS", { lastEnv: lastEnv?.id, previewed });
-    log({ event: "success", lastEnv: lastEnv?.id, previewed });
+  if (exported && viewClean) {
+    console.log("\nFROM-SCRATCH SUCCESS", { lastEnv: lastEnv?.id, previewed, viewClean });
+    log({ event: "success", lastEnv: lastEnv?.id, previewed, viewClean });
     break;
   }
 }

@@ -76,7 +76,7 @@ ${css || ""}
     if (!actions.length) warnings.push("no data-action nodes painted");
     warnings.push(...layout);
     return {
-      ok: true,
+      ok: warnings.length === 0,
       snapshot,
       actions,
       size: box

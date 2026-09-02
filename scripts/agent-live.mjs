@@ -142,6 +142,21 @@ The important part: observe() must show a player only their own card. Never both
 burned card. Write all five functions yourself — do not fork env_kuhn. Make the table show a real
 playing card. Check it with preview_view, publish it, then start a match and play me.`,
 
+  // Deliberately says nothing about how it should look, and describes a game no
+  // pattern on the page resembles: the design has to come from the agent.
+  pokemon: `Design a two-player Pokemon-style trading card duel as a new environment on this page,
+then play me.
+
+Each player has an active creature and a hand of cards they alone can see. A creature has a name,
+hit points, and an attack that costs energy. On your turn you may attach one energy to your active
+creature, then either attack or pass. An attack deals its damage to the opposing active creature;
+when a creature's hit points reach zero it is knocked out and its owner promotes a fresh creature
+from their hand. A player who cannot promote loses. Deal the starting cards with rng.
+
+Work out the details yourself and write all five functions. observe() must show a player their own
+hand and never the opponent's. Check it with preview_view, including a position part-way through a
+duel, then publish it, start a match against me and play.`,
+
   play: `Look at what is already published on this page with list_environments, open the most
 interesting one, start a match against me and play it well. Look at the board with inspect_view
 before each of your moves. When the game is over, export the episodes and tell me what is in them.`,

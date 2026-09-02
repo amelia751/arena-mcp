@@ -105,6 +105,26 @@ function __empty(v) {
   if (v && typeof v === "object") return Object.keys(v).length === 0;
   return false;
 }
+function __brief(v) {
+  var s;
+  try { s = JSON.stringify(v); } catch (e) { return "(does not serialize)"; }
+  if (s === undefined) return "undefined";
+  return s.length > 700 ? s.slice(0, 700) + "… (truncated)" : s;
+}
+// A playout that blows up is only useful if you can see what it blew up on, so
+// every failure carries the position that produced it.
+function __fail(msg, fn, e, ctx) {
+  var out = { error: msg, fn: fn };
+  if (e && e.stack) out.stack = e.stack;
+  if (ctx) {
+    out.at_step = ctx.n;
+    out.seat = ctx.seat;
+    out.state = __brief(ctx.state);
+    if (ctx.action !== undefined) out.action = ctx.action;
+    if (ctx.legal) out.legal = ctx.legal.slice(0, 12);
+  }
+  return out;
+}
 function __one(seed, policy_seed, max_steps, collect) {
   var state = init(seed);
   if (state == null || typeof state !== "object") return { error: "init must return an object", fn: "init" };
@@ -114,27 +134,30 @@ function __one(seed, policy_seed, max_steps, collect) {
   var lastObs = null, lastLegal = null, lastSeat = null;
   while (n < max_steps) {
     var seat = state.to_move;
-    if (typeof seat !== "number") return { error: "state.to_move must be the current seat (number)", fn: "init/step" };
+    var here = { n: n, seat: seat, state: state };
+    if (typeof seat !== "number") return __fail("state.to_move must be the current seat (number)", "init/step", null, here);
     var legal;
     try { legal = legal_actions(state, seat); }
-    catch (e) { return { error: String(e && e.message || e), fn: "legal_actions", stack: e && e.stack }; }
-    if (!Array.isArray(legal)) return { error: "legal_actions must return an array of strings", fn: "legal_actions" };
-    if (!legal.length) return { error: "legal_actions is empty on a non-terminal state at step " + n, fn: "legal_actions" };
+    catch (e) { return __fail(String(e && e.message || e), "legal_actions", e, here); }
+    if (!Array.isArray(legal)) return __fail("legal_actions must return an array of strings", "legal_actions", null, here);
+    if (!legal.length) return __fail("legal_actions is empty on a non-terminal state at step " + n, "legal_actions", null, here);
     for (var i = 0; i < legal.length; i++) {
-      if (typeof legal[i] !== "string") return { error: "legal_actions[" + i + "] is not a string", fn: "legal_actions" };
+      if (typeof legal[i] !== "string") return __fail("legal_actions[" + i + "] is not a string", "legal_actions", null, here);
     }
+    here.legal = legal;
     var obs;
     try { obs = observe(state, seat); }
-    catch (e) { return { error: String(e && e.message || e), fn: "observe", stack: e && e.stack }; }
+    catch (e) { return __fail(String(e && e.message || e), "observe", e, here); }
     lastObs = obs; lastLegal = legal; lastSeat = seat;
     var a = legal[Math.floor(rng(cursor++) * legal.length)];
+    here.action = a;
     var r;
     try { r = step(state, a); }
-    catch (e) { return { error: String(e && e.message || e), fn: "step", stack: e && e.stack }; }
-    if (!r || typeof r !== "object") return { error: "step must return { state, rewards, terminal }", fn: "step" };
-    if (!r.state || typeof r.state !== "object") return { error: "step().state missing", fn: "step" };
-    if (!Array.isArray(r.rewards)) return { error: "step().rewards must be a number array", fn: "step" };
-    if (typeof r.terminal !== "boolean") return { error: "step().terminal must be a boolean", fn: "step" };
+    catch (e) { return __fail(String(e && e.message || e), "step", e, here); }
+    if (!r || typeof r !== "object") return __fail("step must return { state, rewards, terminal }", "step", null, here);
+    if (!r.state || typeof r.state !== "object") return __fail("step().state missing", "step", null, here);
+    if (!Array.isArray(r.rewards)) return __fail("step().rewards must be a number array", "step", null, here);
+    if (typeof r.terminal !== "boolean") return __fail("step().terminal must be a boolean", "step", null, here);
     actions.push(a);
     state = r.state;
     hashes.push(__hash(state));
@@ -148,7 +171,12 @@ function __one(seed, policy_seed, max_steps, collect) {
       return out;
     }
   }
-  return { error: "did not terminate within " + max_steps + " steps", fn: "step" };
+  return __fail("did not terminate within " + max_steps + " steps", "step", null, {
+    n: n,
+    seat: state.to_move,
+    state: state,
+    legal: actions.slice(-8),
+  });
 }
 
 globalThis.__init = function (j) {
@@ -181,7 +209,11 @@ globalThis.__sweep = function (j) {
   var steps = 0, w = [0, 0, 0], first = null;
   for (var i = 0; i < n; i++) {
     var p = __one(i + (a.seed0 || 0), i * 31 + 5, max, i === 0);
-    if (p.error) return JSON.stringify({ error: p.error, fn: p.fn, stack: p.stack, at: i });
+    if (p.error) {
+      p.at = i;
+      p.seed = i + (a.seed0 || 0);
+      return JSON.stringify(p);
+    }
     steps += p.steps;
     if (p.rewards[0] > 0) w[0]++;
     else if (p.rewards[0] < 0) w[1]++;

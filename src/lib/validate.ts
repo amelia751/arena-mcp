@@ -9,6 +9,11 @@ import { parseRender, validateAuthoredView } from "./view";
 
 const LEAK_NAME = /(rng|seed|cursor|secret|private|hidden|burned|deck|internal)/i;
 
+/** Containers whose per-seat slot is that seat's secret: hands[0] belongs to seat 0. */
+const PRIVATE_CONTAINER = /^(hands?|cards?|holdings?|private|hidden|secrets?)$/i;
+/** Zones inside a per-seat record that are that seat's secret. */
+const PRIVATE_ZONE = /^(hands?|cards?|deck|draw|held|reserve|private|hidden|secrets?)$/i;
+
 function guestError(e: unknown): string {
   if (e instanceof SandboxError) {
     const loc = e.stackFromGuest
@@ -20,18 +25,51 @@ function guestError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/**
+ * A stack line says which line threw. It does not say what the position looked
+ * like when it did, which is the thing you actually need to fix it — so the
+ * failing state, seat and action travel back with the failure.
+ */
+function whereItBroke(f: {
+  at_step?: number;
+  seat?: number;
+  state?: string;
+  action?: string;
+  legal?: string[];
+  seed?: number;
+}): string {
+  if (f.state === undefined && f.at_step === undefined) return "";
+  const lines = ["It broke here — read the state and work out which value is missing:"];
+  const where = [
+    f.seed !== undefined ? `seed ${f.seed}` : null,
+    f.at_step !== undefined ? `step ${f.at_step}` : null,
+    f.seat !== undefined ? `seat ${f.seat} to move` : null,
+  ].filter(Boolean);
+  if (where.length) lines.push(`  at: ${where.join(", ")}`);
+  if (f.action !== undefined) lines.push(`  action being applied: ${f.action}`);
+  if (f.legal?.length) lines.push(`  legal there: ${f.legal.join(" ")}`);
+  if (f.state !== undefined) lines.push(`  state: ${f.state}`);
+  return lines.join("\n");
+}
+
 function classifyFlow(
   field: string,
   visible: boolean[],
 ): InfoFlowRow {
+  // players[0].hand is seat 0's secret; players[0].active is a piece both players
+  // can see. Only the private zone is a leak — failing the public one would make
+  // any game with a shared board impossible to publish.
+  const owned = field.match(/^([A-Za-z_]\w*)\.(\d+)(?:\.([A-Za-z_]\w*))?/);
   const seats = visible.map((v, seat) => {
     if (!v) return "hidden" as const;
-    const owned = field.match(/^(hands|players|seats|private|cards|hidden)\.(\d+)\b/);
+    if (LEAK_NAME.test(field)) return "leak" as const;
     if (owned) {
       const owner = Number(owned[2]);
-      if (!Number.isNaN(owner) && owner !== seat) return "leak" as const;
+      if (!Number.isNaN(owner) && owner !== seat) {
+        if (PRIVATE_CONTAINER.test(owned[1])) return "leak" as const;
+        if (owned[3] && PRIVATE_ZONE.test(owned[3])) return "leak" as const;
+      }
     }
-    if (LEAK_NAME.test(field)) return "leak" as const;
     return "visible" as const;
   });
   return { field, seats };
@@ -69,13 +107,20 @@ export async function validateEnvironment(
           steps?: number;
           last_obs?: unknown;
           last_legal?: string[];
+          at_step?: number;
+          seat?: number;
+          state?: string;
+          action?: string;
+          legal?: string[];
         }>("__playout", { seed: 1, policy_seed: 1, max_steps: 8, collect: true }, 2000);
         if (p.error && p.fn !== "step" && !String(p.error).includes("did not terminate")) {
           push({
             id: "V0",
             ok: false,
             summary: "Does not run",
-            detail: `${p.fn || "environment"}: ${p.error}${p.stack ? ` (${p.stack.split("\n")[0]})` : ""}`,
+            detail:
+              `${p.fn || "environment"}: ${p.error}${p.stack ? ` (${p.stack.split("\n")[0]})` : ""}\n` +
+              whereItBroke(p),
           });
           return;
         }
@@ -180,10 +225,16 @@ export async function validateEnvironment(
       // V4 + sample + V6
       const t0 = performance.now();
       try {
-        const sweep = realm.call<{
+        type Sweep = {
           error?: string;
           fn?: string;
           stack?: string;
+          at_step?: number;
+          seat?: number;
+          state?: string;
+          action?: string;
+          legal?: string[];
+          seed?: number;
           n?: number;
           steps?: number;
           balance?: number[];
@@ -197,19 +248,42 @@ export async function validateEnvironment(
             render?: unknown;
             render_error?: string;
           };
-        }>("__sweep", { n: episodes, max_steps: 200, seed0: 0 }, 20000);
+        };
+        const runSweep = (n: number) =>
+          realm.call<Sweep>(
+            "__sweep",
+            { n, max_steps: 200, seed0: 0 },
+            Math.min(60000, 10000 + n * 30),
+          );
+        // Price a few playouts before committing to the full sweep. An expensive
+        // step() is not wrong, so it gets verified over fewer playouts rather than
+        // stalling until the sandbox interrupts it.
+        const probeN = Math.min(40, episodes);
+        const probeStart = performance.now();
+        let sweep: Sweep = runSweep(probeN);
+        const perEpisode = (performance.now() - probeStart) / probeN;
+        let ran = probeN;
+        let trimmedForTime = false;
+        if (!sweep.error) {
+          const affordable = Math.max(probeN, Math.floor(20000 / Math.max(perEpisode, 0.01)));
+          ran = Math.min(episodes, affordable);
+          trimmedForTime = ran < episodes;
+          if (ran > probeN) sweep = runSweep(ran);
+        }
         const ms = performance.now() - t0;
         if (sweep.error) {
           push({
             id: "V4",
             ok: false,
             summary: "A random playout failed or never ended",
-            detail: `V4: ${sweep.fn || "environment"}: ${sweep.error}${sweep.stack ? ` (${sweep.stack.split("\n")[0]})` : ""}`,
+            detail:
+              `V4: ${sweep.fn || "environment"}: ${sweep.error}${sweep.stack ? ` (${sweep.stack.split("\n")[0]})` : ""}\n` +
+              whereItBroke(sweep),
           });
         } else {
           const mean = (sweep.steps || 0) / (sweep.n || 1);
           playouts = {
-            n: sweep.n || episodes,
+            n: sweep.n || ran,
             steps: sweep.steps || 0,
             mean_length: Math.round(mean * 10) / 10,
             balance: sweep.balance || [0, 0, 0],
@@ -219,6 +293,9 @@ export async function validateEnvironment(
             id: "V4",
             ok: true,
             summary: `${playouts.n} playouts all terminated (mean ${playouts.mean_length} steps, ${playouts.ms}ms)`,
+            detail: trimmedForTime
+              ? `V4: every playout ended, but ${episodes} of them did not fit in the time budget, so ${playouts.n} were run. Each step is expensive — deep-copying the whole state on every move is the usual reason — and that cost is paid again on every move of a real match.`
+              : undefined,
           });
           if (sweep.sample) {
             sample_step = {
@@ -274,7 +351,15 @@ export async function validateEnvironment(
           }
         }
       } catch (e) {
-        push({ id: "V4", ok: false, summary: "Sweep threw", detail: guestError(e) });
+        const stalled = e instanceof SandboxError && /interrupt/i.test(e.message);
+        push({
+          id: "V4",
+          ok: false,
+          summary: stalled ? "Playouts are too slow to finish" : "Sweep threw",
+          detail: stalled
+            ? "V4: playouts ran out of time even after cutting their number down. A single move is costing far too much work — look for a deep copy of the whole state, or a loop over the whole deck, on every step() — and make step() cheaper."
+            : guestError(e),
+        });
       }
 
       // V8 — can every seat see its own deal?

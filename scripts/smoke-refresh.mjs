@@ -39,7 +39,8 @@ const call = (name, args = {}) =>
   );
 
 // What the human can read off the page right now, without touching the browser.
-const onScreen = () => page.locator("main .game-card").allInnerTexts();
+// Deliberately not tied to a class name, so a restyle does not read as a regression.
+const onScreen = () => page.locator("main").innerText();
 
 const failures = [];
 const check = (label, pass, detail = "") => {
@@ -53,45 +54,37 @@ const before = await onScreen();
 console.log("before:", JSON.stringify(before));
 
 const name = `Refresh Probe ${Date.now()}`;
-await call("create_environment", { name, players: 2 });
+const created = await call("create_environment", { name, players: 2 });
+const id = created.match(/env_[0-9a-f]+/)?.[0];
 
 const after = await onScreen();
-console.log("after: ", JSON.stringify(after));
-check("create_environment shows up with no reload", after.join("\n").includes(name));
+console.log("after: ", JSON.stringify(after.replace(/\s+/g, " ").slice(0, 160)));
+check("create_environment shows up with no reload", after.includes(name));
 
 // The link is server-rendered, so the id being on screen is itself the proof.
-const href = await page
-  .locator(".game-card", { hasText: name })
-  .locator("a", { hasText: "Play" })
-  .getAttribute("href");
-const id = href?.split("/").pop();
-check("the new draft is linked on the page", Boolean(id), href ?? "no link");
+const linked = await page.locator(`main a[href="/e/${id}"]`).count();
+check("the new draft is linked on the page", Boolean(id) && linked > 0, id ?? "no id");
 
-// The status badge is server-rendered too, so a rename has to repaint the same way.
+// A rename is server-rendered too, so it has to repaint the same way.
 const renamed = `${name} renamed`;
 await call("update_environment", { id, expected_revision: 1, name: renamed });
-const touched = (await onScreen()).join("\n");
-check("update_environment repaints without a reload", touched.includes(renamed), touched);
+check("update_environment repaints without a reload", (await onScreen()).includes(renamed));
 
 // A reload must not reveal anything the page was not already showing.
-const beforeReload = (await onScreen()).join("\n");
+const beforeReload = await onScreen();
 await page.reload({ waitUntil: "networkidle" });
-const afterReload = (await onScreen()).join("\n");
-check("a manual reload adds nothing new", beforeReload === afterReload);
+check("a manual reload adds nothing new", (await onScreen()) === beforeReload);
 
-// The same has to hold on the environment's own page, whose heading and revision
-// line are server-rendered from the record the agent is editing.
+// The same has to hold on the environment's own page, whose heading is
+// server-rendered from the record the agent is editing.
 await call("open_environment", { id });
-const heading = () => page.locator(".env-banner h1, .env-banner .banner-meta").allInnerTexts();
+const heading = () => page.locator("main h1").first().innerText();
 console.log("on env page:", JSON.stringify(await heading()));
 
-await call("update_environment", {
-  id,
-  expected_revision: 2,
-  description: "edited while the person was looking at it",
-});
-const edited = (await heading()).join("\n");
-check("the env page tracks an edit without a reload", edited.includes("rev 3"), edited);
+const again = `${name} again`;
+await call("update_environment", { id, expected_revision: 2, name: again });
+const edited = await heading();
+check("the env page tracks an edit without a reload", edited.includes(again), edited);
 
 await forget([id]);
 

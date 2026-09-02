@@ -13,9 +13,11 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. The table starts empty. Ask an agent to design a game. Hidden
-patterns (`env_tictactoe`, `env_connect_four`, `env_kuhn`) can be forked; they are not listed as
-finished products.
+Open http://localhost:3000 and ask an agent to design a game. It writes the rules and the table
+both — the guide gives it the contract and the sandbox rules, and says nothing about how a game
+should look. The patterns (`env_tictactoe`, `env_connect_four`, `env_kuhn`) lend their state
+machine to anyone who reads or forks one, and withhold their `render()`, so an authored game's
+appearance is always authored.
 
 ## The environment contract
 
@@ -74,7 +76,7 @@ and every seat can see its own deal without `undefined` in it.
 
 | Tool | What it does |
 | --- | --- |
-| `get_authoring_guide` | Contract, HTML/CSS render rules, worked Tic-Tac-Toe |
+| `get_authoring_guide` | Contract, sandbox rules, HTML/CSS render rules, the preview loop |
 | `preview_view` | Draw markup, or a saved `render()` at any position, and describe what painted |
 | `inspect_view` | Describe the live table the person is playing on |
 | `list_environments` | Authored environments, plus hidden fork templates |

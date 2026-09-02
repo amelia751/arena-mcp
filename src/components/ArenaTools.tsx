@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { snapshotDraft, snapshotLiveTable } from "@/lib/view-dom";
+import { snapshotDraft, snapshotLiveTable, surroundings } from "@/lib/view-dom";
 import type { Projection } from "@/lib/view-project";
 import {
   currentDesk,
@@ -66,6 +66,8 @@ function renderProjection(
   out.push(snap.problems.length ? "ok: false" : "ok: true");
   if (extra?.where) out.push(`showing: ${extra.where}`);
   out.push(`size: ${snap.size.width}x${snap.size.height}px`);
+  const host = surroundings();
+  if (host) out.push(`the page around it: ${host}`);
   out.push("");
   out.push("what painted:");
   out.push(snap.picture);
@@ -102,7 +104,7 @@ function renderProjection(
 }
 
 const GUIDE_DESC =
-  "The five-function contract, how to write render() as HTML+CSS, the look-and-fix loop with preview_view, and a complete worked example. Call this before writing any code.";
+  "The five-function contract, the sandbox rules, how to write render() as HTML+CSS, and the look-and-fix loop with preview_view. Call this before writing any code.";
 
 export function ArenaTools() {
   const router = useRouter();

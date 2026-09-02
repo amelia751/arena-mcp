@@ -15,6 +15,19 @@ function mergeCode(base: EnvCode, patch?: EnvCodePatch): EnvCode {
   return next;
 }
 
+/**
+ * A pattern exists to show how a rule set is expressed against the contract, not
+ * how a table should look. It hands back its state machine and keeps its render
+ * to itself, so an authored game's appearance is always authored.
+ */
+const PATTERN_WITHHOLDS_RENDER =
+  "A pattern lends you its rules, not its table. Write render() for the game you are making.";
+
+function sharedCode(env: Environment): EnvCode {
+  if (env.kind !== "template") return env.code;
+  return { ...env.code, render: "" };
+}
+
 function publicEnv(env: Environment) {
   return {
     id: env.id,
@@ -117,7 +130,7 @@ export async function listEnvs() {
         name: e.name,
         description: e.description,
         role: "template",
-        note: "Hidden pattern. Fork it — do not treat it as a finished environment.",
+        note: "A rule set expressed against the contract. Read or fork it for its state machine; it does not lend you a table.",
       })),
   };
 }
@@ -127,6 +140,9 @@ export async function getEnv(id: string, fn?: keyof EnvCode) {
   if (!env) return { error: "environment not found", status: 404 as const };
   if (fn) {
     if (!CODE_KEYS.includes(fn)) return { error: `unknown function ${fn}`, status: 400 as const };
+    if (fn === "render" && env.kind === "template") {
+      return { id: env.id, revision: env.revision, function: fn, source: "", note: PATTERN_WITHHOLDS_RENDER };
+    }
     return {
       id: env.id,
       revision: env.revision,
@@ -136,7 +152,8 @@ export async function getEnv(id: string, fn?: keyof EnvCode) {
   }
   return {
     ...publicEnv(env),
-    code: env.code,
+    code: sharedCode(env),
+    ...(env.kind === "template" ? { note: PATTERN_WITHHOLDS_RENDER } : {}),
   };
 }
 
@@ -212,10 +229,13 @@ export async function forkEnv(input: { source_id: string; name: string }) {
   if (!src) return { error: "source environment not found", status: 404 as const };
   if (!input.name?.trim()) return { error: "name is required", status: 400 as const };
   const t = now();
+  const code = sharedCode(src);
   const env: Environment = {
     ...src,
     id: nid("env"),
     name: input.name.trim(),
+    code,
+    code_hash: codeHash(code),
     kind: "authored",
     published: false,
     confirmed_info_flow: false,
@@ -225,7 +245,10 @@ export async function forkEnv(input: { source_id: string; name: string }) {
   };
   env.validation = await safeValidate(env.code, env.players, false);
   await putEnvironment(env);
-  return { environment: { ...publicEnv(env), code: env.code, forked_from: src.id } };
+  return {
+    environment: { ...publicEnv(env), code: env.code, forked_from: src.id },
+    ...(src.kind === "template" ? { note: PATTERN_WITHHOLDS_RENDER } : {}),
+  };
 }
 
 export async function validateEnv(id: string, episodes?: number, publish = false) {

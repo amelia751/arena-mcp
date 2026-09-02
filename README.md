@@ -34,6 +34,11 @@ the game needs chance, and keep a `rng_cursor` on state.
 page hosts that markup in an iframe with no same-origin access and no network reach, so authored
 markup cannot touch the page, its storage, or the tool surface.
 
+Because anyone can author an environment, everything downstream of one is treated as hostile input.
+Every tool that hands back a name, an observation, a validation message, or a board carries
+`untrustedContentHint`, and text lifted off the table is stripped of line breaks and capped before it
+reaches a report an agent reads as prose.
+
 ## Looking at the table
 
 An agent cannot tell whether a board is right by reading its own HTML, so `preview_view` and

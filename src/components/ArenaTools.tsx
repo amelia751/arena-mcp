@@ -182,6 +182,7 @@ export function ArenaTools() {
           required: ["name"],
           additionalProperties: false,
         },
+        annotations: { untrustedContentHint: true },
         execute: async (input) =>
           clip(await api("/api/environments", { method: "POST", body: JSON.stringify(input) }), 3500),
       },
@@ -198,6 +199,7 @@ export function ArenaTools() {
           required: ["source_id", "name"],
           additionalProperties: false,
         },
+        annotations: { untrustedContentHint: true },
         execute: async ({ source_id, name }) =>
           clip(
             await api(`/api/environments/${source_id}/fork`, {
@@ -232,6 +234,7 @@ export function ArenaTools() {
           required: ["id", "expected_revision"],
           additionalProperties: false,
         },
+        annotations: { untrustedContentHint: true },
         execute: async ({ id, ...rest }) =>
           clip(
             await api(`/api/environments/${id}`, { method: "PATCH", body: JSON.stringify(rest) }),
@@ -251,7 +254,7 @@ export function ArenaTools() {
           required: ["id"],
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async ({ id, episodes }) =>
           clip(
             await api(`/api/environments/${id}/validate`, {
@@ -340,7 +343,7 @@ export function ArenaTools() {
           required: ["id"],
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async ({ id }) => clip(await api(`/api/environments/${id}/dataset`), 2500),
       },
       {
@@ -360,6 +363,7 @@ export function ArenaTools() {
           required: ["id", "expected_revision"],
           additionalProperties: false,
         },
+        annotations: { untrustedContentHint: true },
         execute: async ({ id, ...rest }) =>
           clip(await api(`/api/environments/${id}/publish`, { method: "POST", body: JSON.stringify(rest) })),
       },
@@ -373,6 +377,7 @@ export function ArenaTools() {
           required: ["id"],
           additionalProperties: false,
         },
+        annotations: { untrustedContentHint: true },
         execute: async ({ id }) => {
           const desk = await openEnvironment(String(id));
           if (!desk) return `Opened /e/${id}, but its table has not mounted yet. Call inspect_view in a moment.`;
@@ -396,6 +401,7 @@ export function ArenaTools() {
           required: ["environment_id"],
           additionalProperties: false,
         },
+        annotations: { untrustedContentHint: true },
         execute: async ({ environment_id, human_seat, agent_label }) => {
           const desk = await openEnvironment(String(environment_id));
           if (!desk) {
@@ -441,7 +447,7 @@ export function ArenaTools() {
           },
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async ({ match_id, seat }) => {
           const session = deskMatch();
           const id = match_id ?? session?.match_id;
@@ -487,6 +493,7 @@ export function ArenaTools() {
           required: ["action", "expected_revision"],
           additionalProperties: false,
         },
+        annotations: { untrustedContentHint: true },
         execute: async ({ match_id, ...rest }) => {
           const session = deskMatch();
           const id = match_id ?? session?.match_id;
@@ -537,7 +544,7 @@ export function ArenaTools() {
           },
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async ({ match_id, after_revision, timeout_ms }) => {
           const session = deskMatch();
           const id = match_id ?? session?.match_id;

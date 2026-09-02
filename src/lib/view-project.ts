@@ -49,8 +49,11 @@ export function project(options?: ProjectOptions): Projection {
     disabled: boolean;
   };
 
+  // Authored text lands inside a report the agent reads as prose, so it must not be able to
+  // carry line breaks or run long enough to impersonate the report's own sections.
   function squash(s: string): string {
-    return String(s || "").replace(/\s+/g, " ").trim();
+    const t = String(s || "").replace(/\s+/g, " ").trim();
+    return t.length > 80 ? t.slice(0, 80) + "…" : t;
   }
 
   function ownText(el: Element): string {

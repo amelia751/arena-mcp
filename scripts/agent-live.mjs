@@ -198,9 +198,13 @@ async function main() {
   const page = await context.newPage();
 
   const pageEvents = [];
+  // A refused publish answers 4xx on purpose, and the browser logs every one of
+  // them. Counting those as faults would make a correct run look broken.
+  const refused = new Set();
   page.on("console", (m) => {
     if (m.type() === "error" || m.type() === "warning") {
       const text = m.text();
+      if (/status of 4\d\d/.test(text) && refused.size) return;
       pageEvents.push({ kind: m.type(), text });
       log({ event: "console", kind: m.type(), text });
     }
@@ -214,6 +218,7 @@ async function main() {
   });
   page.on("response", async (r) => {
     if (r.status() >= 400) {
+      if (r.status() < 500) refused.add(r.url());
       log({ event: "http_error", status: r.status(), url: r.url() });
     }
   });
@@ -329,6 +334,7 @@ async function main() {
     exported: false,
   };
   const toolErrors = [];
+  const gates = [];
   let nudges = 0;
   let stalled = 0;
 
@@ -438,7 +444,12 @@ async function main() {
       const flat = typeof out === "string" ? out : JSON.stringify(out);
       const isError =
         flat.startsWith("error:") || /"error"\s*:/.test(flat.slice(0, 200));
-      if (isError) toolErrors.push({ turn, name, args, out: flat.slice(0, 600) });
+      // Some refusals are the product doing its job: a game nobody looked at, or
+      // one that hides information without the matrix being confirmed.
+      const isGate =
+        /publish blocked|has to be confirmed|validation failed/i.test(flat.slice(0, 400));
+      if (isError && !isGate) toolErrors.push({ turn, name, args, out: flat.slice(0, 600) });
+      if (isGate) gates.push({ turn, name, out: flat.slice(0, 200) });
       console.log(`  <- ${name} ${ms}ms ${isError ? "ERROR " : ""}${flat.slice(0, 400).replace(/\n/g, "\n     ")}`);
       log({ event: "tool", turn, name, args, ms, error: isError, out: flat.slice(0, 6000) });
 
@@ -519,13 +530,21 @@ async function main() {
     humanMoves: human.total,
     trajectoryRows: episodes?.rows ?? 0,
     toolErrors: toolErrors.length,
+    gatesFired: gates.length,
     pageErrors: pageEvents.length,
     log: LOG,
     finalShot,
   };
-  writeFileSync(path.join(OUT, `run-${RUN}-summary.json`), JSON.stringify({ summary, toolErrors, pageEvents }, null, 2));
+  writeFileSync(
+    path.join(OUT, `run-${RUN}-summary.json`),
+    JSON.stringify({ summary, toolErrors, gates, pageEvents }, null, 2),
+  );
   console.log("\n==== summary ====");
   console.log(JSON.stringify(summary, null, 2));
+  if (gates.length) {
+    console.log("\n==== refused on purpose ====");
+    for (const g of gates) console.log(`turn ${g.turn} ${g.name}: ${g.out.replace(/\n/g, " ")}`);
+  }
   if (toolErrors.length) {
     console.log("\n==== tool errors ====");
     for (const e of toolErrors.slice(0, 20)) {

@@ -118,6 +118,11 @@ observation, legal_actions, action, reward, terminal, latency_ms
 Download from the play panel or `GET /api/episodes?match_id=…&format=jsonl`. A Python loader lives
 in `arena_dataset.py`.
 
+The **Data** tab of any game is the human side of `describe_dataset`: the schema a match writes,
+a real recorded step, which observation fields the table actually paints, and which fields differ
+by seat. The checks sit on top of it as a pass strip, since what a game records is only worth
+reading once you know it holds up.
+
 ## Checking it yourself
 
 `document.modelContext` needs Chrome 146+ with `chrome://flags/#enable-webmcp-testing` enabled, or

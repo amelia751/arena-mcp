@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { EnvChrome } from "./EnvChrome";
 import { PlayDesk } from "./PlayDesk";
 import { InspectDesk } from "./InspectDesk";
-import { VerifyPanel } from "./VerifyPanel";
+import { DataPanel } from "./DataPanel";
 import { RevalidateButton } from "./RevalidateButton";
 import type { EnvTab } from "./EnvTabs";
 import type { Environment } from "@/lib/types";
@@ -103,14 +103,24 @@ export function EnvInspect({ id }: { id: string }) {
   );
 }
 
-export function EnvVerify({ id }: { id: string }) {
+export function EnvData({ id }: { id: string }) {
   return (
-    <Shell id={id} tab="verify">
+    <Shell id={id} tab="data">
       {(env) => (
         <>
-          <RevalidateButton id={env.id} />
+          <div className="data-bar">
+            <p className="note">
+              What a match on this table writes down, and what each seat is allowed to know.
+            </p>
+            <RevalidateButton id={env.id} />
+          </div>
           <div className="report">
-            <VerifyPanel report={env.validation} players={env.players} />
+            <DataPanel
+              environmentId={env.id}
+              revision={env.revision}
+              report={env.validation}
+              players={env.players}
+            />
           </div>
         </>
       )}

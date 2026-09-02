@@ -1,10 +1,10 @@
-export type EnvTab = "play" | "inspect" | "verify";
+export type EnvTab = "play" | "inspect" | "data";
 
 export function EnvTabs({ id, current }: { id: string; current: EnvTab }) {
   const tabs: Array<[EnvTab, string, string]> = [
     ["play", "Table", `/e/${id}`],
     ["inspect", "Inspect", `/e/${id}/inspect`],
-    ["verify", "Report", `/e/${id}/verify`],
+    ["data", "Data", `/e/${id}/data`],
   ];
   return (
     <nav className="tabs">

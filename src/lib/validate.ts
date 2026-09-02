@@ -525,7 +525,9 @@ export async function validateEnvironment(
 
   return {
     ok: failures.length === 0,
-    checks,
+    // Checks land in the order they finish, which is not the order they are named
+    // in. Anyone reading the report expects V0 first.
+    checks: checks.slice().sort((a, b) => a.id.localeCompare(b.id)),
     failures,
     info_flow,
     playouts,

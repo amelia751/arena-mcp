@@ -301,7 +301,12 @@ async function main() {
       if (!legal.length) continue;
       const choice = pick(legal);
       try {
-        const control = page.frameLocator(".game-host iframe").locator(`[data-action="${choice}"]`);
+        // A column may carry its action on every cell, so click the first one a
+        // person would reach rather than insisting the id is unique.
+        const control = page
+          .frameLocator(".game-host iframe")
+          .locator(`[data-action="${choice}"]:not([disabled])`)
+          .first();
         await control.click({ timeout: 4000 });
         human.moves++;
         human.total++;

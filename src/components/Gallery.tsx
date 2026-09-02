@@ -5,6 +5,17 @@ import { EnvCard } from "./EnvCard";
 import { registerLive } from "@/lib/live";
 
 type Card = { id: string; name: string; description: string; published?: boolean };
+type Dealt = { id: string; environment_id: string; environment_name: string } | null;
+
+async function loadDealt(): Promise<Dealt> {
+  try {
+    const res = await fetch("/api/matches", { cache: "no-store" });
+    const body = (await res.json()) as { match?: Dealt };
+    return body.match ?? null;
+  } catch {
+    return null;
+  }
+}
 
 async function loadCards(): Promise<Card[]> {
   const res = await fetch("/api/environments", { cache: "no-store" });
@@ -34,9 +45,11 @@ function BlankCard() {
 
 export function Gallery() {
   const [games, setGames] = useState<Card[] | null>(null);
+  const [dealt, setDealt] = useState<Dealt>(null);
 
   const reload = useCallback(async () => {
     setGames(await loadCards());
+    setDealt(await loadDealt());
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
@@ -47,8 +60,10 @@ export function Gallery() {
   useEffect(() => {
     let stale = false;
     const draw = async () => {
-      const next = await loadCards();
-      if (!stale) setGames(next);
+      const [next, live] = await Promise.all([loadCards(), loadDealt()]);
+      if (stale) return;
+      setGames(next);
+      setDealt(live);
     };
     const tick = setInterval(() => void draw(), 2000);
     const onVis = () => {
@@ -81,6 +96,13 @@ export function Gallery() {
 
   return (
     <section className="gallery">
+      {/* The agent can deal a match from anywhere. This is how the person finds it. */}
+      {dealt ? (
+        <a className="dealt" href={`/e/${dealt.environment_id}`}>
+          <span>A match is dealt on {dealt.environment_name} and waiting for you</span>
+          <span className="dealt-go">Sit down</span>
+        </a>
+      ) : null}
       <Shelf label="Published" games={published} />
       <Shelf label="Drafts" games={drafts} />
     </section>

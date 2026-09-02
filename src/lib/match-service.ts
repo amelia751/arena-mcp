@@ -244,9 +244,12 @@ export async function botMove(match_id: string) {
  * dealt by the person are the same thing, so the board finds it either way —
  * including after a reload, which used to drop it.
  */
-export async function liveMatch(environmentId: string) {
+export async function liveMatch(environmentId?: string) {
   const all = await listMatches(environmentId);
-  const match = all.find((m) => !m.terminal) ?? all[0] ?? null;
+  // A table asks about its own game and wants the last one either way, so a
+  // finished board survives a reload. The gallery asks about all of them and
+  // only cares about a game still waiting for someone.
+  const match = all.find((m) => !m.terminal) ?? (environmentId ? all[0] : null) ?? null;
   return { match: match ? publicMatch(match) : null };
 }
 

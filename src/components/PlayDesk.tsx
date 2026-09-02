@@ -192,6 +192,36 @@ export function PlayDesk({
     return () => registerDesk(null);
   }, [environmentId, start, load, toSession]);
 
+  // Whoever deals — the person on this page or the agent through start_match —
+  // the table joins that match. Without this the board kept its match in React
+  // state alone, so a page that arrived afterwards sat on a Start button while
+  // the agent waited for a move that could not be made.
+  useEffect(() => {
+    let stale = false;
+    const tick = async () => {
+      const here = matchRef.current;
+      // A match in play is already being followed by the turn poller.
+      if (here && !here.terminal) return;
+      try {
+        const res = await json<{ match: MatchInfo | null }>(
+          `/api/matches?environment_id=${environmentId}`,
+        );
+        const live = res.match;
+        if (stale || !live || live.id === matchRef.current?.id) return;
+        if (matchRef.current && !matchRef.current.terminal) return;
+        await load(live.id);
+      } catch {
+        /* the next tick tries again */
+      }
+    };
+    void tick();
+    const timer = setInterval(() => void tick(), 2500);
+    return () => {
+      stale = true;
+      clearInterval(timer);
+    };
+  }, [environmentId, load]);
+
   // What the table looks like at move zero, for anyone who has not sat down yet.
   useEffect(() => {
     if (match) return;
@@ -303,7 +333,7 @@ export function PlayDesk({
             onClick={() => void start().catch(() => {})}
             disabled={busy}
           >
-            {match ? "Deal again" : "Start playing"}
+            {match ? "Deal again" : "Start match"}
           </button>
         </div>
       </div>
@@ -368,7 +398,7 @@ export function PlayDesk({
 
       {!match && view ? (
         <p className="note idle-note">
-          This is the opening position. Press Start playing to take a seat.
+          This is the opening position. Press Start match, or ask the agent to deal one.
         </p>
       ) : null}
 

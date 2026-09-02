@@ -142,7 +142,7 @@ const FNS: Array<[string, string]> = [
   ["init", "seed → state"],
   ["legal_actions", "→ action mask"],
   ["observe", "→ per-seat view"],
-  ["step", "→ rewards + terminal"],
+  ["step", "→ reward + done"],
   ["render", "→ html + css"],
 ];
 
@@ -228,8 +228,6 @@ export function DiagramFigure() {
           <p className="dg-sub">Calls tools on the same page</p>
           <div className="dg-brands">
             <Brand src="/diagram/openai.svg" label="ChatGPT desktop" note="site tools, on by default" />
-            <Brand src="/diagram/gemini.svg" label="Gemini 2.5 Pro" note="scripts/agent-live.mjs" />
-            <Brand src="/diagram/googlecloud.svg" label="Vertex AI" note="generateContent + functions" />
             <Brand src="/diagram/chrome.svg" label="Chrome 146+" note="enable-webmcp-testing" />
           </div>
         </section>
@@ -264,48 +262,49 @@ export function DiagramFigure() {
             ↓
           </div>
 
-          <div className="dg-fn">
-            <p className="kicker">Environment · five pure functions</p>
-            <ol>
-              {FNS.map(([name, hint], i) => (
-                <li key={name}>
-                  <i className="dg-plus">{i === 0 ? "" : "+"}</i>
-                  <code>{name}</code>
-                  <span>{hint}</span>
-                </li>
-              ))}
-            </ol>
-            <p className="dg-foot">
-              contract shaped like OpenSpiel / PettingZoo — a model can write it from what it
-              already knows
-            </p>
-          </div>
-
-          <div className="dg-two">
-            <div className="dg-sub-box">
-              <header>
-                <Icon glyph="engine" tone="#c9a227" />
-                <p className="kicker">Sandbox</p>
-              </header>
-              <Brand src="/diagram/javascript.svg" label="quickjs-emscripten" />
-              <p>
-                pure · injected <code>rng(n)</code>
-                <br />
-                no Date + no Math.random + no I/O
+          <div className="dg-mid">
+            <div className="dg-fn">
+              <p className="kicker">Environment · five pure functions</p>
+              <ol>
+                {FNS.map(([name, hint], i) => (
+                  <li key={name}>
+                    <i className="dg-plus">{i === 0 ? "" : "+"}</i>
+                    <code>{name}</code>
+                    <span>{hint}</span>
+                  </li>
+                ))}
+              </ol>
+              <p className="dg-foot">
+                shaped like OpenSpiel / PettingZoo — a model can write it from what it already
+                knows
               </p>
             </div>
-            <div className="dg-sub-box">
-              <header>
-                <Icon glyph="frame" tone="#4a6fc4" />
-                <p className="kicker">Authored table</p>
-              </header>
-              <p>
-                <code>render()</code> html + css in an iframe
-                <br />
-                no same-origin + no network
-                <br />
-                cannot reach <code>modelContext</code>
-              </p>
+            <div className="dg-col">
+              <div className="dg-sub-box">
+                <header>
+                  <Icon glyph="engine" tone="#c9a227" />
+                  <p className="kicker">Sandbox</p>
+                </header>
+                <Brand src="/diagram/javascript.svg" label="quickjs-emscripten" />
+                <p>
+                  pure · injected <code>rng(n)</code>
+                  <br />
+                  no Date + no Math.random + no I/O
+                </p>
+              </div>
+              <div className="dg-sub-box">
+                <header>
+                  <Icon glyph="frame" tone="#4a6fc4" />
+                  <p className="kicker">Authored table</p>
+                </header>
+                <p>
+                  <code>render()</code> html + css in an iframe
+                  <br />
+                  no same-origin + no network
+                  <br />
+                  cannot reach <code>modelContext</code>
+                </p>
+              </div>
             </div>
           </div>
 
@@ -339,24 +338,26 @@ export function DiagramFigure() {
             ↓
           </div>
 
-          <div className="dg-match">
-            <header>
-              <Icon glyph="seats" />
-              <p className="kicker">Shared match</p>
-            </header>
-            <p>
-              human seat + agent seat → one <code>step()</code>, one revision
-            </p>
-          </div>
+          <div className="dg-mid">
+            <div className="dg-match">
+              <header>
+                <Icon glyph="seats" />
+                <p className="kicker">Shared match</p>
+              </header>
+              <p>
+                human seat + agent seat → one <code>step()</code>, one revision
+              </p>
+            </div>
 
-          <div className="dg-store">
-            <header>
-              <Icon glyph="store" tone="#0f7a74" />
-              <Brand src="/diagram/netlify.svg" label="Netlify Blobs" />
-            </header>
-            <p>
-              store <code>arena</code> / <code>db.json</code> — environments + matches + steps
-            </p>
+            <div className="dg-store">
+              <header>
+                <Icon glyph="store" tone="#0f7a74" />
+                <Brand src="/diagram/netlify.svg" label="Netlify Blobs" />
+              </header>
+              <p>
+                store <code>arena</code> / <code>db.json</code> — environments · matches · steps
+              </p>
+            </div>
           </div>
         </section>
 
@@ -387,10 +388,6 @@ export function DiagramFigure() {
               </ul>
             </div>
           ))}
-          <p className="dg-toolfoot">
-            every capability the page has, an agent has too — each reply carries the new
-            observation, the legal actions and the revision to quote next
-          </p>
         </section>
 
         <div className="dg-tail" aria-hidden="true">
@@ -416,6 +413,10 @@ export function DiagramFigure() {
           </div>
         </section>
       </div>
+      <figcaption>
+        Every capability the page has, an agent has too. Each reply carries the new observation,
+        the legal actions and the revision to quote next.
+      </figcaption>
     </figure>
   );
 }

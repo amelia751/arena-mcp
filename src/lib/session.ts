@@ -92,6 +92,12 @@ export async function openEnvironment(id: string): Promise<DeskApi | null> {
     registerDesk(null);
     navigate(target);
   }
-  const found = await waitForDesk(8000);
-  return found && found.environment_id === id ? found : found;
+  // A cold route can take a while to arrive, and a desk for some other game is
+  // not this game's table — handing that back deals the match on the wrong board.
+  const deadline = Date.now() + 12000;
+  while (Date.now() < deadline) {
+    if (desk && desk.environment_id === id) return desk;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return null;
 }

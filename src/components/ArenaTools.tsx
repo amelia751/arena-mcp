@@ -632,7 +632,7 @@ export function ArenaTools() {
               method: "POST",
               body: JSON.stringify({ environment_id, seat: human_seat ?? 0, agent_label }),
             });
-            return clip({ ...res, note: "Started headless — the person's page is not on this environment." }, 2000);
+            return `${clip(res, 1800)}\nThe match is dealt but this page did not move to the table. Tell the person to open /e/${environment_id} — the board picks the match up on its own once they are there.`;
           }
           desk.setOpponent("agent");
           const session = await desk.start({

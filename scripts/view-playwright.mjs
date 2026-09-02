@@ -89,32 +89,3 @@ ${css || ""}
     await browser.close();
   }
 }
-
-export async function inspectLive(base, environmentId) {
-  mkdirSync(OUT, { recursive: true });
-  const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
-    await page.goto(`${base}/e/${environmentId}`, { waitUntil: "networkidle", timeout: 20000 });
-    const sit = page.getByRole("button", { name: /sit down/i });
-    if (await sit.count()) {
-      await sit.click({ timeout: 8000 }).catch(() => {});
-      await page.getByRole("button", { name: /deal again/i }).waitFor({ timeout: 4000 }).catch(() => {});
-    }
-    await page.locator("[data-action]").first().waitFor({ timeout: 3000 }).catch(() => {});
-    let snapshot = "";
-    try {
-      snapshot = await page.locator("body").ariaSnapshot();
-    } catch {
-      snapshot = await page.locator("body").innerText();
-    }
-    const actions = await page
-      .locator("[data-action]")
-      .evaluateAll((els) => els.map((el) => el.getAttribute("data-action")).filter(Boolean));
-    const shot = path.join(OUT, `live-${environmentId}.png`);
-    await page.screenshot({ path: shot, fullPage: true });
-    return { ok: true, snapshot, actions, screenshot: shot };
-  } finally {
-    await browser.close();
-  }
-}

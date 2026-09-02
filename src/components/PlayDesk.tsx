@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { GameView } from "./GameView";
-import { UiTree } from "./UiTree";
-import type { UINode } from "@/lib/ui-tree";
 import type { AuthoredView } from "@/lib/view";
 
 type MatchView = {
@@ -18,7 +16,6 @@ type MatchView = {
   observation?: {
     observation: unknown;
     legal_actions: string[];
-    ui?: UINode;
     view?: AuthoredView;
     seat: number;
     revision: number;
@@ -147,16 +144,6 @@ export function PlayDesk({
       {view?.observation?.view?.html ? (
         <GameView
           view={view.observation.view}
-          legal={yourTurn ? view.observation.legal_actions : []}
-          disabled={busy || !yourTurn}
-          onAction={(id) => {
-            setClickedAt(Date.now());
-            void act(id);
-          }}
-        />
-      ) : view?.observation?.ui ? (
-        <UiTree
-          node={view.observation.ui}
           legal={yourTurn ? view.observation.legal_actions : []}
           disabled={busy || !yourTurn}
           onAction={(id) => {

@@ -26,7 +26,7 @@ export function parseRender(raw: unknown): ParsedRender {
     return { kind: "html", view: { html: raw, css: "" }, errors: [] };
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { kind: "invalid", errors: ["render must return { html, css } or a UI tree"] };
+    return { kind: "invalid", errors: ["render must return { html, css }"] };
   }
   const row = raw as { html?: unknown; css?: unknown; type?: unknown };
   if (typeof row.html === "string") {
@@ -129,14 +129,23 @@ export function validateAuthoredView(view: AuthoredView, legal?: string[]): stri
   return errors;
 }
 
-export function buildSrcDoc(view: AuthoredView): string {
-  const clean = sanitizeView(view);
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
-html,body{margin:0;padding:8px;background:transparent;color:#1c1814;font-family:ui-sans-serif,system-ui,sans-serif}
-button{font:inherit;cursor:pointer}
-button:disabled{cursor:default}
-${clean.view.css}
-</style></head><body>${clean.view.html}</body></html>`;
+export function fallbackView(observation: unknown, legal: string[]): AuthoredView {
+  const buttons = legal
+    .map((id) => {
+      const safe = escapeHtml(id);
+      return `<button type="button" data-action="${safe}" aria-label="${safe}">${safe}</button>`;
+    })
+    .join("");
+  return {
+    html: `<div class="fb"><p>render() did not return { html, css }.</p><pre>${escapeHtml(JSON.stringify(observation, null, 2))}</pre><div class="fb-moves">${buttons}</div></div>`,
+    css: `.fb{max-width:28rem;color:#6e675c;font-size:14px}.fb pre{white-space:pre-wrap;font-size:12px}.fb-moves{display:flex;flex-wrap:wrap;gap:8px}.fb-moves button{background:#1c1814;color:#f4efe6;border:0;border-radius:999px;padding:6px 14px}`,
+  };
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
 }
 
 function tagName(chunk: string): string {

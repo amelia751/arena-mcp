@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { inspectLive, previewHtml } from "./view-playwright.mjs";
+import { previewHtml } from "./view-playwright.mjs";
 
 const BASE = process.argv[2] || "http://127.0.0.1:3001";
 const PROJECT = "your-project-id";
@@ -206,7 +206,7 @@ async function execTool(name, a = {}) {
         if (missing.length) snap.warnings.push(`legal actions with no data-action: ${missing.join(", ")}`);
         return { ...snap, legal_actions: res.legal_actions ?? null, source: "render" };
       }
-      return inspectLive(BASE, id);
+      return { error: "render did not return HTML to inspect" };
     },
   };
   if (!map[name]) return { error: `unknown tool ${name}` };

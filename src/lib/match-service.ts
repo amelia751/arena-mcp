@@ -10,8 +10,7 @@ import {
   replaceMatchAndStep,
 } from "./store";
 import { withRealm } from "./sandbox";
-import { fallbackTree, validateUITree, type UINode } from "./ui-tree";
-import { parseRender, sanitizeView, type AuthoredView } from "./view";
+import { fallbackView, parseRender, sanitizeView, type AuthoredView } from "./view";
 
 function shuffle<T>(items: T[], seed: number): { items: T[]; order: number[] } {
   const idx = items.map((_, i) => i);
@@ -91,21 +90,16 @@ async function observationFor(match: Match, seat: number) {
     const observation = realm.call("__observe", { state: match.state, player: seat });
     const legal = realm.call<string[]>("__legal", { state: match.state, player: seat });
     const { items, order } = shuffle(legal, match.revision * 1009 + seat * 17);
-    let tree: UINode | undefined;
-    let view: AuthoredView | undefined;
+    let view: AuthoredView;
     try {
       const rendered = realm.call<unknown>("__render", { observation });
       const parsed = parseRender(rendered);
-      if (parsed.kind === "html") {
-        view = sanitizeView(parsed.view).view;
-      } else if (parsed.kind === "tree") {
-        const node = parsed.tree as UINode;
-        tree = validateUITree(node).length ? fallbackTree(observation, legal) : node;
-      } else {
-        tree = fallbackTree(observation, legal);
-      }
+      view =
+        parsed.kind === "html"
+          ? sanitizeView(parsed.view).view
+          : fallbackView(observation, legal);
     } catch {
-      tree = fallbackTree(observation, legal);
+      view = fallbackView(observation, legal);
     }
     return {
       match_id: match.id,
@@ -117,7 +111,6 @@ async function observationFor(match: Match, seat: number) {
       observation,
       legal_actions: items,
       presented_order: order,
-      ui: tree,
       view,
     };
   });

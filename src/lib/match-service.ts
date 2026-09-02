@@ -239,6 +239,17 @@ export async function botMove(match_id: string) {
   });
 }
 
+/**
+ * The match a table should be showing. A match dealt by the agent and a match
+ * dealt by the person are the same thing, so the board finds it either way —
+ * including after a reload, which used to drop it.
+ */
+export async function liveMatch(environmentId: string) {
+  const all = await listMatches(environmentId);
+  const match = all.find((m) => !m.terminal) ?? all[0] ?? null;
+  return { match: match ? publicMatch(match) : null };
+}
+
 export async function waitForTurn(input: {
   match_id: string;
   after_revision: number;

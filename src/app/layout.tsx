@@ -37,6 +37,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link className="wordmark" href="/">
               Arena
             </Link>
+            <Link className="nav-quiet" href="/diagram">
+              Diagram
+            </Link>
           </nav>
           {children}
         </div>

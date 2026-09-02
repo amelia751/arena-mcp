@@ -45,9 +45,23 @@ a {
 .site-nav {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 3.5rem;
   margin-bottom: 1.5rem;
   border-bottom: 1px solid var(--ink);
+}
+
+.nav-quiet {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.nav-quiet:hover {
+  color: var(--ink);
 }
 
 .wordmark {
@@ -801,4 +815,466 @@ h2 {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   margin: 0 0 0.4rem;
+}
+
+.shell:has(.diagram-page) {
+  max-width: 72rem;
+}
+
+.diagram-page h1 {
+  margin-bottom: 0.45rem;
+}
+
+.diagram-lead {
+  max-width: 34rem;
+  margin: 0 0 1.6rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.diagram {
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.dg {
+  display: grid;
+  min-width: 68rem;
+  grid-template-columns: 13.5rem 3.2rem minmax(23rem, 1fr) 3.2rem 16rem;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas:
+    "human ah host at tools"
+    "agent aa host at tools"
+    "tail  tail tail tail tail"
+    "out   out  out  out out";
+  gap: 0.7rem 0.25rem;
+  font-size: 0.82rem;
+  line-height: 1.42;
+}
+
+.dg code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+}
+
+.dg .kicker {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.68rem;
+}
+
+.dg-ico {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--ink);
+}
+
+.dg-box,
+.dg-host,
+.dg-out {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.dg-box {
+  align-self: start;
+  padding: 0.85rem 0.9rem 0.95rem;
+}
+
+.dg-box header,
+.dg-sub-box header,
+.dg-loop header,
+.dg-match header,
+.dg-store header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+
+.dg-sub {
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.dg-human {
+  grid-area: human;
+  background: #a0c35a;
+  border-color: transparent;
+}
+
+.dg-agent {
+  grid-area: agent;
+  background: #b0c4ef;
+  border-color: transparent;
+}
+
+.dg-tools {
+  grid-area: tools;
+  align-self: stretch;
+  background: #f6ecf8;
+  border-color: transparent;
+}
+
+.dg-host {
+  grid-area: host;
+}
+
+.dg-out {
+  grid-area: out;
+}
+
+.dg-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dg-rows li {
+  padding: 0.16rem 0;
+  font-size: 0.78rem;
+}
+
+.dg-brands {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.dg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+}
+
+.dg-brand img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex: none;
+}
+
+.dg-brand b {
+  font-weight: 700;
+}
+
+.dg-brand i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.dg-arrow {
+  align-self: start;
+  margin-top: 2.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--muted);
+}
+
+.dg-arrow b {
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.dg-ah {
+  grid-area: ah;
+}
+
+.dg-aa {
+  grid-area: aa;
+}
+
+.dg-at {
+  grid-area: at;
+}
+
+.dg-down {
+  text-align: center;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--accent);
+  margin: -0.2rem 0;
+}
+
+.dg-plus {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.dg-host {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.7rem;
+  background: #f4f4f2;
+}
+
+.dg-hostbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.1rem 0.2rem 0.4rem;
+}
+
+.dg-url {
+  margin-left: auto;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.dg-tools-reg,
+.dg-fn,
+.dg-sub-box,
+.dg-loop,
+.dg-match,
+.dg-store {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0.7rem 0.8rem;
+  background: #fff;
+}
+
+.dg-tools-reg p {
+  margin: 0.25rem 0 0;
+}
+
+.dg-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.45rem !important;
+}
+
+.dg-flags span {
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  background: #ececea;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.dg-fn {
+  background: #f9df6d;
+  border-color: transparent;
+}
+
+.dg-fn ol {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+}
+
+.dg-fn li {
+  display: grid;
+  grid-template-columns: 0.8rem 8.2rem 1fr;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.15rem 0;
+  font-size: 0.78rem;
+}
+
+.dg-fn li span {
+  color: #6a5a10;
+}
+
+.dg-foot {
+  margin: 0.5rem 0 0;
+  font-size: 0.7rem;
+  color: #6a5a10;
+}
+
+.dg-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.dg-sub-box p {
+  margin: 0.2rem 0 0;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.dg-sub-box .dg-brand {
+  margin-bottom: 0.15rem;
+}
+
+.dg-loop {
+  border-color: #f0c5cc;
+  background: #fff7f8;
+}
+
+.dg-checks {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.1rem 0.5rem;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.dg-checks b {
+  color: var(--accent);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+}
+
+.dg-gates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.dg-gate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.26rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.dg-gate.bad {
+  background: #f8d4d8;
+  color: var(--accent);
+}
+
+.dg-gate.ok {
+  background: #d7edda;
+  color: var(--good);
+}
+
+.dg-match {
+  background: #ba81c5;
+  border-color: transparent;
+}
+
+.dg-match p,
+.dg-store p {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.dg-store {
+  background: #e6e6e3;
+  border-color: transparent;
+}
+
+.dg-group {
+  margin-top: 0.65rem;
+}
+
+.dg-group .kicker {
+  color: var(--tone, var(--muted));
+  margin-bottom: 0.15rem;
+}
+
+.dg-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dg-group li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.13rem 0.4rem;
+  margin: 0.12rem 0;
+  border: 1px solid #e6d9ea;
+  border-left: 3px solid var(--tone, #e6d9ea);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.dg-group li .dg-ico {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.dg-tail {
+  grid-area: tail;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dg-tail b {
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.dg-out {
+  padding: 0.85rem 1rem;
+  background: #7ec8c3;
+  border-color: transparent;
+}
+
+.dg-outbody {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem 1.5rem;
+  margin-top: 0.35rem;
+}
+
+.dg-schema {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.dg-schema code {
+  font-weight: 700;
+}
+
+.dg-schema span {
+  color: #14403d;
+}
+
+.dg-outside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dg-toolfoot {
+  margin: 0.8rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: #6b4a74;
 }

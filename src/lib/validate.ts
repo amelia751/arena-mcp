@@ -277,6 +277,64 @@ export async function validateEnvironment(
         push({ id: "V4", ok: false, summary: "Sweep threw", detail: guestError(e) });
       }
 
+      // V8 — can every seat see its own deal?
+      try {
+        const deal = realm.call<{
+          error?: string;
+          fn?: string;
+          distinct?: number[];
+          samples?: unknown[];
+          corrupt?: string[];
+        }>("__deal_visibility", { players, seeds: 24 }, 5000);
+        if (deal.error) {
+          push({
+            id: "V8",
+            ok: false,
+            summary: "Could not deal repeatedly",
+            detail: `V8: ${deal.fn || "init"}: ${deal.error}`,
+          });
+        } else if (deal.corrupt?.length) {
+          const paths = Array.from(new Set(deal.corrupt));
+          push({
+            id: "V8",
+            ok: false,
+            summary: "The deal produces undefined values",
+            detail:
+              `V8: ${paths.join("; ")}. Anything undefined disappears when the observation is serialized, so the player never sees it.\n` +
+              `The usual cause is indexing an array with a fraction: rng(cursor) returns a float between 0 and 1, so rng(c) % n is not a whole number. Use Math.floor(rng(c) * n).`,
+          });
+        } else {
+          const distinct = deal.distinct ?? [];
+          const most = Math.max(0, ...distinct);
+          const blind = distinct
+            .map((n, seat) => ({ n, seat }))
+            .filter((row) => most > 1 && row.n <= 1);
+          if (blind.length) {
+            const names = blind.map((b) => `seat ${b.seat}`).join(" and ");
+            push({
+              id: "V8",
+              ok: false,
+              summary: `${names} cannot see the deal`,
+              detail:
+                `V8: over 24 deals, some seats saw ${most} different opening positions but ${names} saw the same thing every time — that seat is playing blind.\n` +
+                `observe(state, player) must give each player their own private information. Return the card, hand or piece that belongs to \`player\`, and only that one.\n` +
+                `Sample of what ${blind[0] ? `seat ${blind[0].seat}` : "that seat"} was given: ${JSON.stringify(deal.samples?.[blind[0].seat]).slice(0, 200)}`,
+            });
+          } else {
+            push({
+              id: "V8",
+              ok: true,
+              summary:
+                most > 1
+                  ? `Every seat sees its own deal (${distinct.join(" and ")} distinct openings)`
+                  : "The opening position is the same for everyone, as it should be in a game with no deal",
+            });
+          }
+        }
+      } catch (e) {
+        push({ id: "V8", ok: false, summary: "Deal visibility check threw", detail: guestError(e) });
+      }
+
       // V7 render coverage — does the markup actually show the position?
       try {
         const cov = realm.call<{

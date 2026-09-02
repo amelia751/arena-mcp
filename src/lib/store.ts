@@ -28,8 +28,50 @@ function empty(): DB {
   return { environments, matches: {}, steps: {} };
 }
 
+function reconcile(db: DB): DB {
+  db.environments = db.environments ?? {};
+  db.matches = db.matches ?? {};
+  db.steps = db.steps ?? {};
+  const templates = new Set(referenceEnvironments().map((e) => e.id));
+  for (const e of referenceEnvironments()) db.environments[e.id] = e;
+  for (const [id, row] of Object.entries(db.environments)) {
+    if (!templates.has(id)) row.kind = "authored";
+  }
+  return db;
+}
+
+const BLOB_KEY = "db.json";
+type BlobStore = {
+  get: (key: string) => Promise<string | null>;
+  setJSON: (key: string, value: unknown) => Promise<unknown>;
+};
+let blobStore: BlobStore | false | null = null;
+
+async function blobs(): Promise<BlobStore | null> {
+  if (!SERVERLESS) return null;
+  if (blobStore === null) {
+    try {
+      const { getStore } = await import("@netlify/blobs");
+      blobStore = getStore({ name: "arena", consistency: "strong" }) as BlobStore;
+    } catch {
+      blobStore = false;
+    }
+  }
+  return blobStore || null;
+}
+
 async function load(): Promise<DB> {
   if (SERVERLESS) {
+    const store = await blobs();
+    if (store) {
+      try {
+        const raw = await store.get(BLOB_KEY);
+        mem = reconcile(raw ? (JSON.parse(raw) as DB) : empty());
+        return mem;
+      } catch {
+        // A blob read failure should not take the page down.
+      }
+    }
     if (!mem) mem = empty();
     return mem;
   }
@@ -42,14 +84,8 @@ async function load(): Promise<DB> {
   if (mem && mtime && mtime === memMtime) return mem;
   try {
     const raw = await readFile(/*turbopackIgnore: true*/ FILE, "utf8");
-    mem = JSON.parse(raw) as DB;
+    mem = reconcile(JSON.parse(raw) as DB);
     memMtime = mtime;
-    const templates = new Set(referenceEnvironments().map((e) => e.id));
-    for (const e of referenceEnvironments()) mem.environments[e.id] = e;
-    for (const [id, row] of Object.entries(mem.environments)) {
-      if (templates.has(id)) continue;
-      row.kind = "authored";
-    }
     return mem;
   } catch {
     mem = empty();
@@ -60,7 +96,17 @@ async function load(): Promise<DB> {
 
 async function persist(db: DB) {
   mem = db;
-  if (SERVERLESS) return;
+  if (SERVERLESS) {
+    const store = await blobs();
+    if (store) {
+      try {
+        await store.setJSON(BLOB_KEY, db);
+      } catch {
+        // Falls back to process memory for the life of this instance.
+      }
+    }
+    return;
+  }
   try {
     await mkdir(path.dirname(FILE), { recursive: true });
     const tmp = FILE + ".tmp";

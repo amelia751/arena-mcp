@@ -41,6 +41,19 @@ const CHROME_ARGS = [
 
 const SCALAR = { string: "STRING", integer: "INTEGER", number: "NUMBER", boolean: "BOOLEAN" };
 
+/** Tool answers are prose that may open with a JSON object. */
+function leadingJson(text) {
+  for (const candidate of [String(text).split("\n")[0], String(text)]) {
+    if (!candidate.startsWith("{")) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      /* try the next shape */
+    }
+  }
+  return null;
+}
+
 function toVertexSchema(schema) {
   if (!schema || typeof schema !== "object") return { type: "OBJECT", properties: {} };
   const t = schema.type;
@@ -281,6 +294,8 @@ async function main() {
   const contents = [{ role: "user", parts: [{ text: task }] }];
   const seen = { created: null, published: false, matchId: null, moves: 0, previews: 0 };
   const toolErrors = [];
+  let nudges = 0;
+  let stalled = 0;
 
   console.log(`task=${TASK} model=${MODEL} log=${LOG}`);
   log({ event: "start", task: TASK, model: MODEL, base: BASE });
@@ -336,13 +351,25 @@ async function main() {
     });
 
     if (!calls.length) {
-      console.log(`\n[${turn}] no tool calls — finish reason ${candidate?.finishReason}`);
+      // A person at the table would say "go on" rather than close the tab.
+      const live = seen.matchId && !/\bDONE\b/.test(text) && nudges < 3;
       log({
-        event: "stop",
+        event: live ? "nudge" : "stop",
         turn,
         reason: candidate?.finishReason || "no_calls",
-        candidate: JSON.stringify(candidate || {}).slice(0, 4000),
+        candidate: JSON.stringify(candidate || {}).slice(0, 3000),
       });
+      if (live) {
+        nudges++;
+        console.log(`\n[${turn}] no tool calls — nudging (${nudges}/3)`);
+        if (text) contents.push({ role: "model", parts: [{ text }] });
+        contents.push({
+          role: "user",
+          parts: [{ text: "Go on — keep playing. Use the tools; do not wait for me to say anything." }],
+        });
+        continue;
+      }
+      console.log(`\n[${turn}] no tool calls — finish reason ${candidate?.finishReason}`);
       break;
     }
 
@@ -364,9 +391,7 @@ async function main() {
       log({ event: "tool", turn, name, args, ms, error: isError, out: flat.slice(0, 6000) });
 
       if (name === "create_environment") {
-        try {
-          seen.created = JSON.parse(flat).environment?.id ?? seen.created;
-        } catch {}
+        seen.created = leadingJson(flat)?.environment?.id ?? seen.created;
       }
       if (name === "publish_environment" && !isError) seen.published = true;
       if (name === "preview_view" || name === "inspect_view") {
@@ -374,16 +399,29 @@ async function main() {
         await shot(`t${turn}-${name}`);
       }
       if (name === "start_match" && !isError) {
-        try {
-          const started = JSON.parse(flat);
-          seen.matchId = started.match_id ?? seen.matchId;
-          if (seen.matchId && !human.task) {
-            human.task = humanLoop(seen.matchId, started.human_seat ?? 0).catch((e) =>
-              log({ event: "human_crash", message: e.message }),
-            );
-          }
-        } catch {}
+        const started = leadingJson(flat);
+        seen.matchId = started?.match_id ?? seen.matchId;
+        if (seen.matchId && !human.task) {
+          human.task = humanLoop(seen.matchId, started?.human_seat ?? 0).catch((e) =>
+            log({ event: "human_crash", message: e.message }),
+          );
+        } else if (!seen.matchId) {
+          console.log(`  ! start_match answered without a match id — no human will join`);
+          log({ event: "start_match_unparsed", out: flat.slice(0, 800) });
+        }
         await shot(`t${turn}-match`);
+      }
+      if (name === "wait_for_turn") {
+        if (flat.startsWith("still_waiting")) {
+          stalled++;
+          if (stalled >= 5 && human.moves === 0) {
+            console.log("  ! the agent is waiting but nobody is playing back — stopping");
+            log({ event: "deadlock", turn, humanMoves: human.moves });
+            turn = MAX_TURNS + 1;
+          }
+        } else {
+          stalled = 0;
+        }
       }
       if (name === "take_action" && !isError) {
         seen.moves++;

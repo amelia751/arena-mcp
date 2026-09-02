@@ -197,6 +197,8 @@ export async function snapshotOffscreen(
   const handle = mountView(host, view, { width: 760 });
   try {
     await new Promise((r) => setTimeout(r, 60));
+    // Show it the way a player would see it, with illegal controls greyed out.
+    if (opts?.legal) handle.setLegal(opts.legal, false);
     return await handle.snapshot(opts);
   } finally {
     handle.destroy();

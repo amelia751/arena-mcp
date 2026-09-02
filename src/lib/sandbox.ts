@@ -213,6 +213,50 @@ globalThis.__illegal = function (j) {
     return JSON.stringify({ accepted: false, error: String(e && e.message || e), legal: legal });
   }
 };
+function __corrupt(v, prefix, out) {
+  if (out.length > 6) return;
+  if (v === undefined) { out.push((prefix || "(the value itself)") + " is undefined"); return; }
+  if (typeof v === "number" && !isFinite(v)) { out.push(prefix + " is " + String(v)); return; }
+  if (Array.isArray(v)) {
+    for (var i = 0; i < v.length; i++) __corrupt(v[i], prefix + "[" + i + "]", out);
+    return;
+  }
+  if (v && typeof v === "object") {
+    var keys = Object.keys(v);
+    for (var k = 0; k < keys.length; k++) {
+      __corrupt(v[keys[k]], prefix ? prefix + "." + keys[k] : keys[k], out);
+    }
+  }
+}
+// A seat that cannot see its own deal is playing blind. Deal many times, count
+// how many distinct opening observations each seat gets, and check that nothing
+// came out undefined along the way.
+globalThis.__deal_visibility = function (j) {
+  var a = JSON.parse(j);
+  var players = a.players || 2;
+  var seeds = a.seeds || 24;
+  var seen = [];
+  var samples = [];
+  var rot = [];
+  for (var p = 0; p < players; p++) { seen.push({}); samples.push(null); }
+  for (var s = 0; s < seeds; s++) {
+    var state;
+    try { state = init(s * 7919 + 3); }
+    catch (e) { return JSON.stringify({ error: String(e && e.message || e), fn: "init" }); }
+    if (s < 3 && rot.length < 4) __corrupt(state, "state", rot);
+    for (var p2 = 0; p2 < players; p2++) {
+      var obs;
+      try { obs = observe(state, p2); }
+      catch (e) { return JSON.stringify({ error: String(e && e.message || e), fn: "observe" }); }
+      if (s < 3 && rot.length < 6) __corrupt(obs, "observe(state, " + p2 + ")", rot);
+      seen[p2][__hash(obs)] = 1;
+      if (samples[p2] === null) samples[p2] = obs;
+    }
+  }
+  var distinct = [];
+  for (var p3 = 0; p3 < players; p3++) distinct.push(Object.keys(seen[p3]).length);
+  return JSON.stringify({ distinct: distinct, samples: samples, corrupt: rot });
+};
 // For every field in the observation, change it and see whether render() paints
 // anything different. A field that never changes the markup is invisible to the
 // person at the table.

@@ -24,6 +24,24 @@ async function api(path: string, init?: RequestInit) {
   }
 }
 
+/** Tools return enough for the agent to pick its own next move. */
+function nextStep(state: {
+  terminal?: boolean;
+  your_turn?: boolean;
+  rewards?: number[];
+  seat?: number;
+}): string {
+  if (state.terminal) {
+    const mine = state.rewards && state.seat != null ? state.rewards[state.seat] : undefined;
+    const verdict = mine == null ? "" : mine > 0 ? " You won." : mine < 0 ? " You lost." : " A draw.";
+    return `The game is over.${verdict} export_episodes shows what was recorded.`;
+  }
+  if (state.your_turn) {
+    return "It is your move. Choose from legal_actions and call take_action with the revision above, or call inspect_view first to see the board as a picture.";
+  }
+  return "It is their move. Call wait_for_turn now — it blocks until they play and hands you the new position.";
+}
+
 function clip(value: unknown, max = 1800): string {
   const s = typeof value === "string" ? value : JSON.stringify(value);
   if (s.length <= max) return s;
@@ -395,19 +413,20 @@ export function ArenaTools() {
           const obs = await api(
             `/api/matches/${session.match_id}/observation?seat=${session.agent_seat}`,
           );
-          return clip(
+          const yourTurn = obs.to_move === session.agent_seat;
+          return `${clip(
             {
               match_id: session.match_id,
               your_seat: session.agent_seat,
               human_seat: session.human_seat,
               revision: obs.revision,
               to_move: obs.to_move,
-              your_turn: obs.to_move === session.agent_seat,
+              your_turn: yourTurn,
               observation: obs.observation,
               legal_actions: obs.legal_actions,
             },
-            2200,
-          );
+            2000,
+          )}\n${nextStep({ your_turn: yourTurn, seat: session.agent_seat })}`;
         },
       },
       {
@@ -431,7 +450,7 @@ export function ArenaTools() {
           const q = s != null ? `?seat=${s}` : "";
           const res = await api(`/api/matches/${id}/observation${q}`);
           if (res.error) return clip(res);
-          return clip(
+          return `${clip(
             {
               match_id: id,
               seat: res.seat,
@@ -443,8 +462,13 @@ export function ArenaTools() {
               observation: res.observation,
               legal_actions: res.legal_actions,
             },
-            2200,
-          );
+            2000,
+          )}\n${nextStep({
+            terminal: res.terminal,
+            your_turn: res.to_move === res.seat,
+            rewards: res.rewards,
+            seat: res.seat,
+          })}`;
         },
       },
       {
@@ -478,7 +502,13 @@ export function ArenaTools() {
           if (res.error) return clip(res);
           await currentDesk()?.refresh();
           const m = res.match;
-          return clip(
+          const after = {
+            terminal: m?.terminal,
+            your_turn: m?.to_move === session?.agent_seat,
+            rewards: m?.rewards,
+            seat: session?.agent_seat,
+          };
+          return `${clip(
             {
               ok: true,
               played: rest.action,
@@ -486,12 +516,12 @@ export function ArenaTools() {
               to_move: m?.to_move,
               terminal: m?.terminal,
               rewards: m?.rewards,
-              your_turn: m?.to_move === session?.agent_seat,
+              your_turn: after.your_turn,
               observation: res.observation?.observation,
               legal_actions: res.observation?.legal_actions,
             },
-            2200,
-          );
+            2000,
+          )}\n${nextStep(after)}`;
         },
       },
       {
@@ -518,11 +548,11 @@ export function ArenaTools() {
           if (timeout_ms != null) q.set("timeout_ms", String(timeout_ms));
           const res = await api(`/api/matches/${id}/wait?${q}`);
           if (res.status === "still_waiting") {
-            return `still_waiting — the person has not moved since revision ${after}. Call wait_for_turn again.`;
+            return `still_waiting — they have not moved since revision ${after}. Call wait_for_turn again; do not stop and wait for a message.`;
           }
           await currentDesk()?.refresh();
           const o = res.observation;
-          return clip(
+          return `${clip(
             {
               status: "ready",
               revision: o?.revision,
@@ -533,8 +563,13 @@ export function ArenaTools() {
               observation: o?.observation,
               legal_actions: o?.legal_actions,
             },
-            2200,
-          );
+            2000,
+          )}\n${nextStep({
+            terminal: o?.terminal,
+            your_turn: o?.to_move === session?.agent_seat,
+            rewards: o?.rewards,
+            seat: session?.agent_seat,
+          })}`;
         },
       },
       {

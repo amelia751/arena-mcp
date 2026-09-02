@@ -5,6 +5,10 @@ An environment is five pure JavaScript functions plus the table they draw. You w
 No modules, no Date, no Math.random, no I/O. The sandbox injects rng(n), a seeded PRNG. If the
 game needs chance, keep a rng_cursor on state and thread it through.
 
+rng(n) returns a FLOAT between 0 and 1. To pick an index you must write Math.floor(rng(c) * size).
+rng(c) % size is a fraction, indexes nothing, and silently leaves undefined in your state — the
+most common way to ship a card game where nobody has any cards.
+
 ## The five functions
 
 init(seed) -> state

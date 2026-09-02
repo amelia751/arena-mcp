@@ -189,6 +189,12 @@ h2 {
   margin-bottom: 1.4rem;
 }
 
+.desk-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 1.1rem;
+}
+
 .quiet {
   appearance: none;
   background: none;

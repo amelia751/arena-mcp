@@ -42,7 +42,7 @@ function publicEnv(env: Environment) {
 }
 
 export function getAuthoringGuide() {
-  return { guide: AUTHORING_GUIDE, example_id: "env_tictactoe" };
+  return { guide: AUTHORING_GUIDE };
 }
 
 export type TraceRow = {

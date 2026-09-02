@@ -1,23 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Geist_Mono, Libre_Franklin, Source_Serif_4 } from "next/font/google";
 import Link from "next/link";
 import { ArenaTools } from "@/components/ArenaTools";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const franklin = Libre_Franklin({
+  variable: "--font-franklin",
+  subsets: ["latin"],
+});
+
+const serif = Source_Serif_4({
+  variable: "--font-cheltenham",
   subsets: ["latin"],
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+  variable: "--font-mono",
   subsets: ["latin"],
-});
-
-const serif = Instrument_Serif({
-  variable: "--font-serif",
-  subsets: ["latin"],
-  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -29,7 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${serif.variable} h-full antialiased`}
+      className={`${franklin.variable} ${serif.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         <ArenaTools />
@@ -38,7 +37,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link className="wordmark" href="/">
               Arena
             </Link>
-            <span>A table for games you have not written yet</span>
           </nav>
           {children}
         </div>

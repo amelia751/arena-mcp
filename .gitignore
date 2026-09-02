@@ -46,6 +46,9 @@ next-env.d.ts
 # planning notes
 /ROADMAP.md
 
+# contest writeup — keep out of the public repo
+/submission/
+
 # credentials
 /secrets/
 

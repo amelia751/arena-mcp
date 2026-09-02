@@ -831,13 +831,18 @@ export function CatTools({ cats }) {
 second `registerTool` with the same name rejects with `InvalidStateError`. The cleanup ordering
 usually saves you, but handle the rejection so it doesn't surface as an unhandled promise.
 
-**Static export changes nothing.** `next.config.mjs` sets `output: 'export'` (built to `out/`,
-deployed to Netlify) — tools run client-side, so a static site is fine. Since there's no server
-runtime, `execute` has no server-only path to reach for: call the Firebase client the same way the
-UI already does.
+**Call the same routes the UI calls.** This app server-renders and keeps its logic in route
+handlers under `src/app/api`, so `execute` is a `fetch` to the endpoint the human interface already
+posts to. That is the point of WebMCP rather than a parallel agent API: one code path, one set of
+checks, and no privileged route that only an agent can reach.
 
-**Reuse Firestore rules as-is.** Tools run in the user's session, so `firestore.rules` already
-governs what an agent can do. Don't add a privileged path for agents.
+**Thread the execute signal.** `execute` receives `(input, { signal })`. Anything that waits —
+polling for a turn, running playouts — should hand that signal to `fetch` so a cancelled call stops
+costing something.
+
+**Repaint before returning.** The agent's next observation includes the page, so a tool that writes
+should let the route re-render before it answers, or its return value and the visible board
+disagree.
 
 **Register in the top-level document.** ChatGPT's browser ignores iframe tools entirely.
 

@@ -12,6 +12,7 @@
     "check:sandbox": "node scripts/smoke-sandbox.mjs",
     "check:refresh": "node scripts/smoke-refresh.mjs",
     "check:wait": "node scripts/smoke-wait.mjs",
+    "check:tools": "node scripts/smoke-tools.mjs",
     "check:webmcp": "node scripts/probe-webmcp.mjs",
     "agent": "node scripts/agent-live.mjs"
   },
@@ -34,6 +35,7 @@
     "eslint-config-next": "16.3.4",
     "playwright": "^1.62.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "webmcp-types": "^0.1.5"
   }
 }

@@ -9,7 +9,7 @@ export function RevalidateButton({ id }: { id: string }) {
   return (
     <button
       type="button"
-      className="quiet"
+      className="pill"
       disabled={busy}
       onClick={async () => {
         setBusy(true);

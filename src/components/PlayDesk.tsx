@@ -216,9 +216,19 @@ export function PlayDesk({
   return (
     <section className="table-wrap">
       <div className="desk-bar">
-        <p className="kicker">
+        <p
+          className={
+            !match
+              ? "status"
+              : match.terminal
+                ? "status status-over"
+                : yourTurn
+                  ? "status status-you"
+                  : "status status-wait"
+          }
+        >
           {!match
-            ? `Seat ${humanSeat} is you. Seat ${agentSeat} is ${opponent === "agent" ? "the agent on this page" : "the bot"}.`
+            ? `You are seat ${humanSeat} · seat ${agentSeat} is ${opponent === "agent" ? "the agent" : "the bot"}`
             : match.terminal
               ? `Over · ${match.rewards.map((r) => (r > 0 ? `+${r}` : r)).join(" / ")}`
               : yourTurn
@@ -230,13 +240,13 @@ export function PlayDesk({
         <div className="desk-actions">
           <button
             type="button"
-            className="quiet"
+            className="pill"
             onClick={() => setOpponent(opponent === "agent" ? "bot" : "agent")}
             title="Who plays the other seat"
           >
             {opponent === "agent" ? "Opponent: agent" : "Opponent: bot"}
           </button>
-          <button type="button" className="quiet" onClick={() => void start()} disabled={busy}>
+          <button type="button" className="pill" onClick={() => void start()} disabled={busy}>
             {match ? "Deal again" : "Sit down"}
           </button>
         </div>

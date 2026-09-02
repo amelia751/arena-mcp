@@ -13,6 +13,9 @@ import {
   waitForDesk,
 } from "@/lib/session";
 
+/** What the browser hands execute(): an abort signal that fires if the call is cancelled. */
+type ToolRun = { signal?: AbortSignal };
+
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, {
     ...init,
@@ -156,69 +159,76 @@ export function ArenaTools() {
 
     const tools: Array<{
       name: string;
+      title: string;
       description: string;
       inputSchema: Record<string, unknown>;
       annotations?: { readOnlyHint?: boolean; untrustedContentHint?: boolean };
-      execute: (input: Record<string, unknown>) => Promise<string>;
+      execute: (input: Record<string, unknown>, ctx: ToolRun) => Promise<string>;
     }> = [
       {
         name: "get_authoring_guide",
+        title: "Read the authoring guide",
         description: GUIDE_DESC,
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true },
-        execute: async () => {
-          const res = await api("/api/guide");
+        execute: async (_input, { signal }) => {
+          const res = await api("/api/guide", { signal });
           return typeof res.guide === "string" ? res.guide : clip(res, 9000);
         },
       },
       {
         name: "list_environments",
+        title: "List the games on this page",
         description:
           "List the environments that exist on this page, with their validation state and whether each is published.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async () => clip(await api("/api/environments")),
+        execute: async (_input, { signal }) => clip(await api("/api/environments", { signal })),
       },
       {
         name: "get_environment",
+        title: "Read a game's source",
         description:
           "Read one environment. Pass fn to fetch a single function body (init, legal_actions, observe, step, render) instead of all five.",
         inputSchema: {
           type: "object",
           properties: {
-            id: { type: "string" },
+            id: { type: "string", description: "The environment id, as list_environments reports it." },
             fn: {
               type: "string",
               enum: ["init", "legal_actions", "observe", "step", "render"],
+              description: "One function to read on its own, which keeps a long game readable.",
             },
           },
           required: ["id"],
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ id, fn }) => {
+        execute: async ({ id, fn }, { signal }) => {
           const q = fn ? `?fn=${encodeURIComponent(String(fn))}` : "";
-          return clip(await api(`/api/environments/${id}${q}`), 4000);
+          return clip(await api(`/api/environments/${id}${q}`, { signal }), 4000);
         },
       },
       {
         name: "create_environment",
+        title: "Create a new game",
         description:
           "Create an environment. code may be partial — send the functions you have and build up. Validation runs immediately and comes back with the result.",
         inputSchema: {
           type: "object",
           properties: {
-            name: { type: "string" },
-            description: { type: "string" },
-            players: { type: "integer" },
+            name: { type: "string", description: "What the game is called, as a person would say it." },
+            description: { type: "string", description: "One line on what playing it is like." },
+            players: { type: "integer", description: "How many seats. Default 2." },
             code: {
               type: "object",
+              description: "Whole function declarations as source text, each named for the function it defines.",
               properties: {
-                init: { type: "string" },
-                legal_actions: { type: "string" },
-                observe: { type: "string" },
-                step: { type: "string" },
-                render: { type: "string" },
+                init: { type: "string", description: "init(seed) -> state, including a numeric to_move." },
+                legal_actions: { type: "string", description: "legal_actions(state, player) -> array of action id strings." },
+                observe: { type: "string", description: "observe(state, player) -> only what that seat may know." },
+                step: { type: "string", description: "step(state, action) -> { state, rewards, terminal }." },
+                render: { type: "string", description: "render(observation) -> { html, css } for the table." },
               },
             },
           },
@@ -226,54 +236,65 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async (input) =>
+        execute: async (input, { signal }) =>
           clip(
-            await writeApi("/api/environments", { method: "POST", body: JSON.stringify(input) }),
+            await writeApi("/api/environments", {
+              method: "POST",
+              body: JSON.stringify(input),
+              signal,
+            }),
             3500,
           ),
       },
       {
         name: "fork_environment",
+        title: "Copy a game into a new draft",
         description:
           "Copy an environment into a new draft you can edit — the way to revise something already published, since publishing freezes it.",
         inputSchema: {
           type: "object",
           properties: {
-            source_id: { type: "string" },
-            name: { type: "string" },
+            source_id: { type: "string", description: "The environment to copy from." },
+            name: { type: "string", description: "What to call the copy." },
           },
           required: ["source_id", "name"],
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ source_id, name }) =>
+        execute: async ({ source_id, name }, { signal }) =>
           clip(
             await writeApi(`/api/environments/${source_id}/fork`, {
               method: "POST",
               body: JSON.stringify({ name }),
+              signal,
             }),
             2500,
           ),
       },
       {
         name: "update_environment",
+        title: "Revise a draft",
         description:
-          "Patch one or more functions on a draft. Takes expected_revision from the last create or update. Published environments are immutable; fork them instead.",
+          "Patch one or more functions on a draft and re-run validation. Takes expected_revision from the last create or update. A published environment is frozen, so fork it to change it.",
         inputSchema: {
           type: "object",
           properties: {
-            id: { type: "string" },
-            expected_revision: { type: "integer" },
-            name: { type: "string" },
-            description: { type: "string" },
+            id: { type: "string", description: "The draft to patch." },
+            expected_revision: {
+              type: "integer",
+              description: "The revision your last call returned. Guards against writing over a change you have not seen.",
+            },
+            name: { type: "string", description: "A new name, if you are renaming it." },
+            description: { type: "string", description: "A new one-line description." },
             code: {
               type: "object",
+              description: "Only the functions you are replacing. The rest are left alone.",
               properties: {
-                init: { type: "string" },
-                legal_actions: { type: "string" },
-                observe: { type: "string" },
-                step: { type: "string" },
-                render: { type: "string" },
+                init: { type: "string", description: "init(seed) -> state, including a numeric to_move." },
+                legal_actions: { type: "string", description: "legal_actions(state, player) -> array of action id strings." },
+                observe: { type: "string", description: "observe(state, player) -> only what that seat may know." },
+                step: { type: "string", description: "step(state, action) -> { state, rewards, terminal }." },
+                render: { type: "string", description: "render(observation) -> { html, css } for the table." },
               },
             },
           },
@@ -281,46 +302,53 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ id, ...rest }) =>
+        execute: async ({ id, ...rest }, { signal }) =>
           clip(
             await writeApi(`/api/environments/${id}`, {
               method: "PATCH",
               body: JSON.stringify(rest),
+              signal,
             }),
             3500,
           ),
       },
       {
         name: "validate_environment",
+        title: "Run the checks on a game",
         description:
-          "Run every check — it runs, it replays, it rejects illegal moves, it ends, it does not leak another seat's cards, and render paints the observation. Failures come back as repair instructions.",
+          "Run every check — it runs, it replays, it rejects illegal moves, it ends, it keeps each seat's cards to itself, and render paints the observation. Failures come back as repair instructions with the seed that produced them.",
         inputSchema: {
           type: "object",
           properties: {
-            id: { type: "string" },
-            episodes: { type: "integer", description: "Random playouts to run. Default 300." },
+            id: { type: "string", description: "The environment to check." },
+            episodes: {
+              type: "integer",
+              description: "Random playouts to run. Default 300. More episodes catch rarer positions.",
+            },
           },
           required: ["id"],
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ id, episodes }) =>
+        execute: async ({ id, episodes }, { signal }) =>
           clip(
             await writeApi(`/api/environments/${id}/validate`, {
               method: "POST",
               body: JSON.stringify({ episodes }),
+              signal,
             }),
             3500,
           ),
       },
       {
         name: "trace_episode",
+        title: "Step through a game move by move",
         description:
           "Step through your game one move at a time and see what each function saw: the state, the legal actions, the observation, the action applied, and the rewards. Pass actions to drive it down a specific line, or leave it out to let it play itself. This is how you find out why a playout failed.",
         inputSchema: {
           type: "object",
           properties: {
-            id: { type: "string" },
+            id: { type: "string", description: "The environment to walk through." },
             seed: { type: "integer", description: "Which deal to walk. Quote the seed a failure reported." },
             actions: {
               type: "array",
@@ -333,10 +361,11 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ id, ...rest }) => {
+        execute: async ({ id, ...rest }, { signal }) => {
           const res = await api(`/api/environments/${id}/trace`, {
             method: "POST",
             body: JSON.stringify(rest),
+            signal,
           });
           if (res.error) return clip(res);
           const rows: Array<Record<string, unknown>> = res.rows ?? [];
@@ -357,15 +386,16 @@ export function ArenaTools() {
       },
       {
         name: "preview_view",
+        title: "Look at a table",
         description:
           "Look at the table. Mounts markup and describes what actually painted — the board as a character grid with real colours, every control and its size, and any layout problem. Pass html+css to try a draft, or environment_id to see the saved render(). Call this after every markup change.",
         inputSchema: {
           type: "object",
           properties: {
             html: { type: "string", description: "Draft markup. Clickable nodes need data-action." },
-            css: { type: "string", description: "Draft stylesheet. No url() or @import." },
+            css: { type: "string", description: "Draft stylesheet. Styles are inline-only; url() and @import are stripped." },
             environment_id: { type: "string", description: "Run this environment's saved render()." },
-            seed: { type: "integer" },
+            seed: { type: "integer", description: "Which deal to draw. Different seeds deal different cards." },
             moves: {
               type: "array",
               items: { type: "string" },
@@ -376,7 +406,7 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ html, css, environment_id, seed, moves, seat }) => {
+        execute: async ({ html, css, environment_id, seed, moves, seat }, { signal }) => {
           let view = {
             html: typeof html === "string" ? html : "",
             css: typeof css === "string" ? css : "",
@@ -388,7 +418,7 @@ export function ArenaTools() {
             if (seed != null) q.set("seed", String(seed));
             if (seat != null) q.set("seat", String(seat));
             if (Array.isArray(moves) && moves.length) q.set("moves", moves.join(","));
-            const res = await api(`/api/environments/${environment_id}/view?${q}`);
+            const res = await api(`/api/environments/${environment_id}/view?${q}`, { signal });
             if (res.error) return clip(res);
             if (res.view && typeof res.revision === "number") {
               looked.set(String(environment_id), res.revision);
@@ -410,6 +440,7 @@ export function ArenaTools() {
       },
       {
         name: "inspect_view",
+        title: "Look at the live table",
         description:
           "Look at the live table the person is playing on right now — same description as preview_view, but of the real board rather than a draft. Use it to check the board matches the position after a move.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -429,26 +460,32 @@ export function ArenaTools() {
       },
       {
         name: "describe_dataset",
+        title: "Describe the data a game records",
         description:
           "The trajectory schema for this environment — observation fields, action space, reward range — plus one real sample row from a playout.",
         inputSchema: {
           type: "object",
-          properties: { id: { type: "string" } },
+          properties: { id: { type: "string", description: "The environment to describe." } },
           required: ["id"],
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ id }) => clip(await api(`/api/environments/${id}/dataset`), 2500),
+        execute: async ({ id }, { signal }) =>
+          clip(await api(`/api/environments/${id}/dataset`, { signal }), 2500),
       },
       {
         name: "publish_environment",
+        title: "Publish a game",
         description:
-          "Publish an environment once every check passes, which mints its shareable page. Takes expected_revision. You must have looked at this exact revision with preview_view first.",
+          "Publish a revision you have looked at with preview_view and every check passes on, which mints its shareable page and freezes the code.",
         inputSchema: {
           type: "object",
           properties: {
-            id: { type: "string" },
-            expected_revision: { type: "integer" },
+            id: { type: "string", description: "The environment to publish." },
+            expected_revision: {
+              type: "integer",
+              description: "The revision to publish, which is the one you last previewed.",
+            },
             confirm_info_flow: {
               type: "boolean",
               description: "Confirm the information-flow matrix reads correctly for this game.",
@@ -458,7 +495,7 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ id, ...rest }) => {
+        execute: async ({ id, ...rest }, { signal }) => {
           const seen = looked.get(String(id));
           if (seen !== rest.expected_revision) {
             return `Publish blocked — you have not looked at revision ${rest.expected_revision} of ${id}. Call preview_view({ environment_id: "${id}", moves: [...] }) and read the picture it returns${
@@ -469,17 +506,19 @@ export function ArenaTools() {
             await writeApi(`/api/environments/${id}/publish`, {
               method: "POST",
               body: JSON.stringify(rest),
+              signal,
             }),
           );
         },
       },
       {
         name: "open_environment",
+        title: "Put a game on the person's screen",
         description:
           "Put an environment's table on the person's screen and describe what they can now see. Do this before starting a match so you are both looking at the same board.",
         inputSchema: {
           type: "object",
-          properties: { id: { type: "string" } },
+          properties: { id: { type: "string", description: "The environment to open." } },
           required: ["id"],
           additionalProperties: false,
         },
@@ -495,12 +534,13 @@ export function ArenaTools() {
       },
       {
         name: "start_match",
+        title: "Deal a match against the person",
         description:
           "Deal a match on the person's screen and take a seat opposite them. Returns your observation and what they can see. The board they click is the board you are playing.",
         inputSchema: {
           type: "object",
           properties: {
-            environment_id: { type: "string" },
+            environment_id: { type: "string", description: "The published game to deal." },
             human_seat: { type: "integer", description: "Seat the person plays. Default 0." },
             agent_label: { type: "string", description: "How you want to be named in the dataset." },
           },
@@ -543,24 +583,25 @@ export function ArenaTools() {
       },
       {
         name: "get_observation",
+        title: "See the current position",
         description:
           "Your view of the current position, the actions you may legally take, and the revision to quote when you move. Defaults to the match on screen.",
         inputSchema: {
           type: "object",
           properties: {
-            match_id: { type: "string" },
-            seat: { type: "integer" },
+            match_id: { type: "string", description: "Which match. Defaults to the one on screen." },
+            seat: { type: "integer", description: "Whose view to take. Defaults to your own seat." },
           },
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ match_id, seat }) => {
+        execute: async ({ match_id, seat }, { signal }) => {
           const session = deskMatch();
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
           const s = seat ?? session?.agent_seat;
           const q = s != null ? `?seat=${s}` : "";
-          const res = await api(`/api/matches/${id}/observation${q}`);
+          const res = await api(`/api/matches/${id}/observation${q}`, { signal });
           if (res.error) return clip(res);
           return `${clip(
             {
@@ -585,22 +626,37 @@ export function ArenaTools() {
       },
       {
         name: "take_action",
+        title: "Play a move",
         description:
           "Play one legal action in the match on screen. Quote expected_revision from your last observation. A rationale and a 1–5 confidence are recorded on the trajectory if you give them.",
         inputSchema: {
           type: "object",
           properties: {
-            action: { type: "string" },
-            expected_revision: { type: "integer" },
-            match_id: { type: "string" },
-            rationale: { type: "string" },
-            confidence: { type: "integer", minimum: 1, maximum: 5 },
+            action: {
+              type: "string",
+              description: "One id copied from legal_actions, exactly as it was given.",
+            },
+            expected_revision: {
+              type: "integer",
+              description: "The revision your last observation reported, so a move lands on the position you saw.",
+            },
+            match_id: { type: "string", description: "Which match. Defaults to the one on screen." },
+            rationale: {
+              type: "string",
+              description: "Why you chose this move, in a sentence. Recorded on the trajectory.",
+            },
+            confidence: {
+              type: "integer",
+              minimum: 1,
+              maximum: 5,
+              description: "How sure you are, 1 to 5. Recorded alongside the move.",
+            },
           },
           required: ["action", "expected_revision"],
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ match_id, ...rest }) => {
+        execute: async ({ match_id, ...rest }, { signal }) => {
           const session = deskMatch();
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
@@ -611,6 +667,7 @@ export function ArenaTools() {
               seat: session?.agent_seat,
               interface: "webmcp",
             }),
+            signal,
           });
           if (res.error) return clip(res);
           await currentDesk()?.refresh();
@@ -639,19 +696,26 @@ export function ArenaTools() {
       },
       {
         name: "wait_for_turn",
+        title: "Wait for the person to move",
         description:
-          "Hold until it is your turn, up to 8 seconds, then return the position. Returns at once if the board is already yours. Returns still_waiting if the person has not played yet, which means call it again.",
+          "Hold until it is your turn, up to 8 seconds, then return the position. Returns at once if the board is already yours. Returns still_waiting while the person is still thinking, which means call it again.",
         inputSchema: {
           type: "object",
           properties: {
-            match_id: { type: "string" },
-            after_revision: { type: "integer" },
-            timeout_ms: { type: "integer" },
+            match_id: { type: "string", description: "Which match. Defaults to the one on screen." },
+            after_revision: {
+              type: "integer",
+              description: "The last revision you saw, so a move made while you were away still counts.",
+            },
+            timeout_ms: {
+              type: "integer",
+              description: "How long to hold before answering, up to 8000ms.",
+            },
           },
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ match_id, after_revision, timeout_ms }) => {
+        execute: async ({ match_id, after_revision, timeout_ms }, { signal }) => {
           const session = deskMatch();
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
@@ -659,7 +723,7 @@ export function ArenaTools() {
           const q = new URLSearchParams({ after_revision: String(after) });
           if (session?.agent_seat != null) q.set("seat", String(session.agent_seat));
           if (timeout_ms != null) q.set("timeout_ms", String(timeout_ms));
-          const res = await api(`/api/matches/${id}/wait?${q}`);
+          const res = await api(`/api/matches/${id}/wait?${q}`, { signal });
           if (res.status === "still_waiting") {
             return `still_waiting — it is their move and they have not played yet (revision ${after}). Call wait_for_turn again; do not stop and wait for a message.`;
           }
@@ -687,23 +751,24 @@ export function ArenaTools() {
       },
       {
         name: "export_episodes",
+        title: "Show what the matches recorded",
         description:
           "What was recorded from the matches played here: the episode headers, one full sample row, and a download link for the complete JSONL. Defaults to the match on screen.",
         inputSchema: {
           type: "object",
           properties: {
-            environment_id: { type: "string" },
-            match_id: { type: "string" },
+            environment_id: { type: "string", description: "Every match played on this game." },
+            match_id: { type: "string", description: "One match in particular." },
           },
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async (input) => {
+        execute: async (input, { signal }) => {
           const q = new URLSearchParams();
           const id = input.match_id ?? (input.environment_id ? null : deskMatch()?.match_id);
           if (input.environment_id) q.set("environment_id", String(input.environment_id));
           if (id) q.set("match_id", String(id));
-          const res = await api(`/api/episodes?${q}`);
+          const res = await api(`/api/episodes?${q}`, { signal });
           if (res.error) return clip(res);
           const records: Array<Record<string, unknown>> = res.records ?? [];
           const episodes = records.filter((r) => r.type === "episode");
@@ -730,13 +795,22 @@ export function ArenaTools() {
         .registerTool(
           {
             name: tool.name,
+            title: tool.title,
             description: tool.description,
             inputSchema: tool.inputSchema,
             annotations: tool.annotations,
-            execute: async (input) => {
+            // The second argument carries a signal that fires when the person or the
+            // agent cancels mid-call. Work that outlives the call it belongs to is
+            // work nobody is waiting for, so it is threaded into every request.
+            execute: async (input, run) => {
+              const ctx: ToolRun = { signal: run?.signal };
+              if (ctx.signal?.aborted) return "cancelled before it ran.";
               try {
-                return await tool.execute(input ?? {});
+                return await tool.execute(input ?? {}, ctx);
               } catch (e) {
+                if (ctx.signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
+                  return "cancelled.";
+                }
                 return `error: ${e instanceof Error ? e.message : String(e)}`;
               }
             },

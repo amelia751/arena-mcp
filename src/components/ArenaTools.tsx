@@ -219,6 +219,35 @@ export function ArenaTools() {
 
     const deskMatch = () => currentDesk()?.match() ?? null;
 
+    /**
+     * The match on screen, or the one still running on the server when this page
+     * has no table mounted — which is what happens the moment a browser reloads
+     * or navigates between turns. Losing the match there used to end the game.
+     */
+    const currentMatch = async (matchId?: string) => {
+      const here = deskMatch();
+      if (here && (!matchId || here.match_id === matchId)) return here;
+      const res = matchId
+        ? await api(`/api/matches/${matchId}`)
+        : await api("/api/matches");
+      const m = res?.match;
+      if (!m?.id) return null;
+      const seats: Array<{ seat: number; player_type: string }> = m.seats ?? [];
+      const agent_seat = seats.find((s) => s.player_type === "agent")?.seat ?? 1;
+      const human_seat = seats.find((s) => s.player_type === "human")?.seat ?? 1 - agent_seat;
+      return {
+        match_id: m.id,
+        environment_id: m.environment_id,
+        environment_name: m.environment_name,
+        human_seat,
+        agent_seat,
+        revision: m.revision,
+        to_move: m.to_move,
+        terminal: m.terminal,
+        rewards: m.rewards,
+      };
+    };
+
     // Publishing is the claim that the table is good, and you cannot make that
     // claim about markup you never looked at. Records the revision last seen.
     const looked = new Map<string, number>();
@@ -673,7 +702,7 @@ export function ArenaTools() {
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async ({ match_id, seat }, { signal }) => {
-          const session = deskMatch();
+          const session = await currentMatch(match_id ? String(match_id) : undefined);
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
           const s = seat ?? session?.agent_seat;
@@ -734,7 +763,7 @@ export function ArenaTools() {
         },
         annotations: { untrustedContentHint: true },
         execute: async ({ match_id, ...rest }, { signal }) => {
-          const session = deskMatch();
+          const session = await currentMatch(match_id ? String(match_id) : undefined);
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
           const res = await api(`/api/matches/${id}/action`, {
@@ -793,7 +822,7 @@ export function ArenaTools() {
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async ({ match_id, after_revision, timeout_ms }, { signal }) => {
-          const session = deskMatch();
+          const session = await currentMatch(match_id ? String(match_id) : undefined);
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
           const after = after_revision ?? session?.revision ?? 0;
@@ -842,7 +871,8 @@ export function ArenaTools() {
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async (input, { signal }) => {
           const q = new URLSearchParams();
-          const id = input.match_id ?? (input.environment_id ? null : deskMatch()?.match_id);
+          const id =
+            input.match_id ?? (input.environment_id ? null : (await currentMatch())?.match_id);
           if (input.environment_id) q.set("environment_id", String(input.environment_id));
           if (id) q.set("match_id", String(id));
           const res = await api(`/api/episodes?${q}`, { signal });

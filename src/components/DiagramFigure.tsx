@@ -242,7 +242,6 @@ export function DiagramFigure() {
             <span className="dg-plus">+</span>
             <Brand src="/diagram/react.svg" label="React 19" />
             <Brand src="/diagram/typescript.svg" label="TS" />
-            <span className="dg-url">arena-play-641 · Origin-Agent-Cluster: ?1</span>
           </header>
 
           <div className="dg-tools-reg">
@@ -264,11 +263,11 @@ export function DiagramFigure() {
 
           <div className="dg-mid">
             <div className="dg-fn">
-              <p className="kicker">Environment · five pure functions</p>
+              <p className="kicker">Environment</p>
               <ol>
-                {FNS.map(([name, hint], i) => (
+                {FNS.map(([name, hint]) => (
                   <li key={name}>
-                    <i className="dg-plus">{i === 0 ? "" : "+"}</i>
+                    <i className="dg-plus">+</i>
                     <code>{name}</code>
                     <span>{hint}</span>
                   </li>
@@ -391,22 +390,24 @@ export function DiagramFigure() {
         </section>
 
         <div className="dg-tail" aria-hidden="true">
-          <span>every move, both seats</span>
-          <b>↓</b>
+          ↓
         </div>
 
         <section className="dg-out">
-          <p className="kicker">Output · one trajectory dataset</p>
           <div className="dg-outbody">
+            <p className="kicker">
+              Output
+              <br />
+              training dataset
+            </p>
             <p className="dg-schema">
               <code>episode</code> match_id + environment + seed + seats + returns
               <br />
               <code>step</code> observation + legal_actions + action + reward + terminal +
               latency_ms
-              <br />
-              <span>interface: human_ui + webmcp · rationale + confidence on the agent seat</span>
             </p>
             <div className="dg-outside">
+              <span>interface: human_ui + webmcp · rationale + confidence on the agent seat</span>
               <Brand src="/diagram/python.svg" label="arena_dataset.py" note="obs, legal, action, reward, next_obs, done" />
               <Brand src="/diagram/github.svg" label="MIT · trajectories CC0" />
             </div>

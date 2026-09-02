@@ -5,7 +5,6 @@ import type {
   ValidationReport,
 } from "./types";
 import { SandboxError, withRealm } from "./sandbox";
-import { validateUITree } from "./ui-tree";
 import { parseRender, validateAuthoredView } from "./view";
 
 const LEAK_NAME = /(rng|seed|cursor|secret|private|hidden|burned|deck|internal)/i;
@@ -253,15 +252,12 @@ export async function validateEnvironment(
                 detail: viewErrors[0],
               });
             } else if (parsed.kind === "tree") {
-              const treeErrors = validateUITree(parsed.tree);
               push({
                 id: "V6",
-                ok: treeErrors.length === 0,
-                summary:
-                  treeErrors.length === 0
-                    ? "render returns a legacy UI tree — prefer { html, css }"
-                    : "render returned an invalid UI tree",
-                detail: treeErrors[0],
+                ok: false,
+                summary: "render returned a UI tree — write { html, css } instead",
+                detail:
+                  "V6: render must return { html: string, css: string }. Put data-action on clickable elements. A typed UI tree is not accepted.",
               });
             } else {
               push({

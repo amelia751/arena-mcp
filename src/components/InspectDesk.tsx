@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GameView } from "./GameView";
 import type { AuthoredView } from "@/lib/view";
+import { CODE_KEYS, type EnvCode } from "@/lib/types";
 
 type Preview = {
   seed: number;
@@ -36,8 +37,16 @@ function shapeOf(value: unknown, depth = 0): string {
   return t;
 }
 
-export function InspectDesk({ environmentId }: { environmentId: string }) {
+export function InspectDesk({
+  environmentId,
+  code,
+}: {
+  environmentId: string;
+  code: EnvCode;
+}) {
   const [seed, setSeed] = useState(0);
+  // observe() is the function that decided what the panel above is showing.
+  const [fn, setFn] = useState<keyof EnvCode>("observe");
   // Null follows whoever is to move, so a walk-through does not need babysitting;
   // pinning a seat is how you compare what the two sides are told.
   const [pinned, setPinned] = useState<number | null>(null);
@@ -207,6 +216,25 @@ export function InspectDesk({ environmentId }: { environmentId: string }) {
           <p className="note">{moves.length ? moves.join(" → ") : "the opening position"}</p>
         </div>
       </div>
+
+      <section className="source">
+        <div className="source-bar">
+          <p className="kicker">Source</p>
+          <div className="fn-pick" role="group" aria-label="Which function to read">
+            {CODE_KEYS.map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={fn === k ? "pill on" : "pill"}
+                onClick={() => setFn(k)}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+        </div>
+        <pre className="code-block">{code[fn] || "// empty"}</pre>
+      </section>
     </section>
   );
 }

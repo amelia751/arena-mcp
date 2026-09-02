@@ -20,7 +20,7 @@ export default async function InspectPage({
         Walk the game without playing it. Switch seats at the same position to see exactly what
         each side is told — in a game with hidden cards, the two views should not match.
       </p>
-      <InspectDesk environmentId={env.id} />
+      <InspectDesk environmentId={env.id} code={env.code} />
     </EnvChrome>
   );
 }

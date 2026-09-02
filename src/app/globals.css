@@ -462,18 +462,43 @@ td.hidden {
   max-height: 18rem;
 }
 
-.spec-fn {
-  margin-bottom: 1.4rem;
+.source {
+  margin-top: 2.2rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
 }
 
-.spec-fn .kicker {
-  margin: 0 0 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
+.source-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
 }
+
+.source-bar .kicker {
+  margin: 0;
+}
+
+.fn-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fn-pick .pill {
+  height: 2rem;
+  padding: 0 0.85rem;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 500;
+}
+
+.source .code-block {
+  max-height: 30rem;
+}
+
 
 .note {
   margin-top: 1.8rem;

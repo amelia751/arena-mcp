@@ -68,9 +68,10 @@ are reported separately from cosmetic notes.
 
 A person gets the same thing on the **Inspect** tab of any game, published or not. It walks the
 game without starting a match: click the board to play a line forward, step back, deal a different
-seed, and read the observation each seat was handed beside the board it produced. Pinning a seat
-shows what that side can see while the other one moves — in a game with hidden cards the two views
-should not match, which is the V5 guarantee made visible rather than asserted.
+seed, and read the observation each seat was handed beside the board it produced, with the five
+functions underneath. Pinning a seat shows what that side can see while the other one moves — in a
+game with hidden cards the two views should not match, which is the V5 guarantee made visible
+rather than asserted.
 
 ## Checks
 

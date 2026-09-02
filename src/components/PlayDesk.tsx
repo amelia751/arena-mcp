@@ -43,9 +43,19 @@ type MatchInfo = {
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
+    cache: "no-store",
     headers: { "content-type": "application/json", ...(init?.headers || {}) },
   });
-  return res.json();
+  const body = await res.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    // A crashed route answers with an HTML error page. Saying so beats a button
+    // that looks like it does nothing.
+    throw new Error(`${url} answered ${res.status} with something that is not JSON`);
+  }
+  return parsed as T;
 }
 
 export function PlayDesk({
@@ -61,6 +71,9 @@ export function PlayDesk({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [chosenOpponent, setOpponent] = useState<"agent" | "bot" | null>(null);
+  // The opening position, so the tab shows the actual table before anyone sits down.
+  const [preview, setPreview] = useState<AuthoredView | null>(null);
+  const [previewErr, setPreviewErr] = useState<string | null>(null);
   // An agent on the page takes the other seat; without one, the bot fills in.
   const agentPresent = useSyncExternalStore(subscribeNothing, hasModelContext, () => false);
   const opponent = chosenOpponent ?? (agentPresent ? "agent" : "bot");
@@ -124,6 +137,11 @@ export function PlayDesk({
         setSteps([]);
         const m = await load(res.match.id);
         return toSession(m)!;
+      } catch (e) {
+        // The agent's start_match still needs the throw; the person clicking the
+        // button needs to be told, which used to happen nowhere.
+        setErr(e instanceof Error ? e.message : String(e));
+        throw e;
       } finally {
         setBusy(false);
       }
@@ -174,7 +192,29 @@ export function PlayDesk({
     return () => registerDesk(null);
   }, [environmentId, start, load, toSession]);
 
-  // The bot only fills in when no agent is driving the other seat.
+  // What the table looks like at move zero, for anyone who has not sat down yet.
+  useEffect(() => {
+    if (match) return;
+    let stale = false;
+    void (async () => {
+      try {
+        const res = await json<{ view?: AuthoredView; error?: string; note?: string }>(
+          `/api/environments/${environmentId}/view?seat=${humanSeat}`,
+        );
+        if (stale) return;
+        if (res.view?.html) setPreview(res.view);
+        else setPreviewErr(res.error ?? res.note ?? "render() gave nothing to draw.");
+      } catch (e) {
+        if (!stale) setPreviewErr(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [environmentId, humanSeat, match]);
+
+  // The bot only fills in when no agent is driving the other seat. It waits long
+  // enough that your own move lands first and reads as yours.
   useEffect(() => {
     if (opponent !== "bot") return;
     if (!match || match.terminal || match.to_move === humanSeat) return;
@@ -185,7 +225,7 @@ export function PlayDesk({
       } catch {
         /* surfaced on the next refresh */
       }
-    }, 320);
+    }, 750);
     return () => clearTimeout(t);
   }, [opponent, match, humanSeat, load]);
 
@@ -212,32 +252,42 @@ export function PlayDesk({
   }, [opponent, match, humanSeat, load]);
 
   const yourTurn = !!match && !match.terminal && match.to_move === humanSeat;
+  const theirTurn = !!match && !match.terminal && match.to_move !== humanSeat;
   const agentSeat = 1 - humanSeat;
+  const them = opponent === "agent" ? "Agent" : "Bot";
+  const score = match?.terminal ? match.rewards : null;
+  const mine = score?.[humanSeat] ?? 0;
+  const last = steps.length ? steps[steps.length - 1] : null;
+  const theirLast = last && last.seat !== humanSeat ? last : null;
+  // Your own move is a round trip. Without this the bar reads "your turn" for a
+  // second after you have already played.
+  const sending = busy && yourTurn;
+
+  // Before anyone sits down the table still shows the opening position, so the
+  // tab is never a bare button on an empty page.
+  const view = obs?.view?.html ? obs.view : preview?.html ? preview : null;
+
+  const seats = [
+    { seat: humanSeat, who: "You", on: yourTurn },
+    { seat: agentSeat, who: them, on: theirTurn },
+  ].sort((a, b) => a.seat - b.seat);
 
   return (
     <section className="table-wrap">
       <div className="desk-bar">
-        <p
-          className={
-            !match
-              ? "status"
-              : match.terminal
-                ? "status status-over"
-                : yourTurn
-                  ? "status status-you"
-                  : "status status-wait"
-          }
-        >
-          {!match
-            ? `You are ${playerName(humanSeat)} · ${playerName(agentSeat)} is ${opponent === "agent" ? "the agent" : "the bot"}`
-            : match.terminal
-              ? `Over · ${match.rewards.map((r) => (r > 0 ? `+${r}` : r)).join(" / ")}`
-              : yourTurn
-                ? "Your turn"
-                : opponent === "agent"
-                  ? "Waiting for the agent"
-                  : "Waiting"}
-        </p>
+        <div className="seats">
+          {seats.map((s) => (
+            <span key={s.seat} className={s.on ? "seat-chip on" : "seat-chip"}>
+              <span className="seat-chip-n">{playerName(s.seat)}</span>
+              <span className="seat-chip-who">{s.who}</span>
+              {score ? (
+                <span className="seat-chip-score">
+                  {score[s.seat] > 0 ? `+${score[s.seat]}` : score[s.seat]}
+                </span>
+              ) : null}
+            </span>
+          ))}
+        </div>
         <div className="desk-actions">
           <button
             type="button"
@@ -247,24 +297,79 @@ export function PlayDesk({
           >
             {opponent === "agent" ? "Opponent: agent" : "Opponent: bot"}
           </button>
-          <button type="button" className="pill" onClick={() => void start()} disabled={busy}>
+          <button
+            type="button"
+            className="pill"
+            onClick={() => void start().catch(() => {})}
+            disabled={busy}
+          >
             {match ? "Deal again" : "Start playing"}
           </button>
         </div>
       </div>
 
+      <div className="desk-status">
+        <p
+          className={
+            !match
+              ? "status"
+              : match.terminal
+                ? "status status-over"
+                : yourTurn && !sending
+                  ? "status status-you"
+                  : "status status-wait"
+          }
+        >
+          {!match
+            ? "Ready when you are"
+            : match.terminal
+              ? mine > 0
+                ? "You won"
+                : mine < 0
+                  ? `${them} won`
+                  : "A draw"
+              : sending
+                ? "Placing your move"
+                : yourTurn
+                  ? "Your turn"
+                  : `${them} is thinking`}
+          {theirTurn || sending ? (
+            <span className="dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          ) : null}
+        </p>
+        {theirLast ? (
+          <p className="last-move" key={theirLast.index}>
+            {playerName(theirLast.seat)} played <b>{theirLast.action}</b>
+          </p>
+        ) : null}
+      </div>
+
       {err && <p className="err">{err}</p>}
 
-      {obs?.view?.html ? (
-        <GameView
-          view={obs.view}
-          legal={yourTurn ? obs.legal_actions : []}
-          disabled={busy || !yourTurn}
-          environmentId={environmentId}
-          matchId={match?.id ?? null}
-          moved={steps.length > 0}
-          onAction={(id) => void act(id)}
-        />
+      {view ? (
+        <div className={match ? undefined : "table-idle"}>
+          <GameView
+            view={view}
+            legal={yourTurn && obs ? obs.legal_actions : []}
+            disabled={busy || !yourTurn}
+            environmentId={environmentId}
+            matchId={match?.id ?? null}
+            moved={steps.length > 0}
+            onAction={(id) => void act(id)}
+          />
+        </div>
+      ) : (
+        <p className="note">{previewErr ?? "Drawing the table…"}</p>
+      )}
+
+      {!match && view ? (
+        <p className="note idle-note">
+          This is the opening position. Press Start playing to take a seat.
+        </p>
       ) : null}
 
       {match && (

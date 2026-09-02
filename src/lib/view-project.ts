@@ -179,23 +179,37 @@ export function project(options?: ProjectOptions): Projection {
 
   const buckets: Record<string, Node[]> = {};
   for (const n of nodes) {
-    if (!n.leaf) continue;
+    // A square holding a piece is not a leaf. Taking leaves only meant every
+    // board that nests its pieces projected as an empty grid.
+    if (n.el.querySelectorAll("*").length > 4) continue;
     const key = Math.round(n.r.width / 2) * 2 + "x" + Math.round(n.r.height / 2) * 2;
     (buckets[key] = buckets[key] || []).push(n);
   }
 
   const grids: Grid[] = [];
   const claimed = new Set<Element>();
-  const bucketKeys = Object.keys(buckets).sort((a, b) => buckets[b].length - buckets[a].length);
+  const areaOf = (key: string) => {
+    const parts = key.split("x");
+    return Number(parts[0]) * Number(parts[1]);
+  };
+  // Bigger boxes first on a tie, so the square wins over the piece sitting in it.
+  const bucketKeys = Object.keys(buckets).sort(
+    (a, b) => buckets[b].length - buckets[a].length || areaOf(b) - areaOf(a),
+  );
   for (const key of bucketKeys) {
-    const members = buckets[key];
+    const members = buckets[key].filter((n) => !claimed.has(n.el));
     if (members.length < 6) continue;
     const tol = Math.max(4, members[0].r.width / 3);
     const cols = axis(members.map((n) => n.r.left + n.r.width / 2), tol);
     const rows = axis(members.map((n) => n.r.top + n.r.height / 2), Math.max(4, members[0].r.height / 3));
     if (cols.length < 2 || rows.length < 2) continue;
     if (cols.length * rows.length > members.length * 1.5) continue;
-    for (const n of members) claimed.add(n.el);
+    for (const n of members) {
+      claimed.add(n.el);
+      // The piece inside a square belongs to that square, not to a grid of its own.
+      const inside = n.el.querySelectorAll("*");
+      for (let i = 0; i < inside.length; i++) claimed.add(inside[i]);
+    }
     grids.push({ members, cols, rows, w: members[0].r.width, h: members[0].r.height });
   }
 
@@ -224,9 +238,26 @@ export function project(options?: ProjectOptions): Projection {
     }
 
     const tally: Record<string, number> = {};
+    /** The disc drawn inside a square is what tells two squares apart. */
+    const innerPaint = (n: Node) => {
+      const inside = n.el.querySelectorAll("*");
+      let best: string | null = null;
+      let bestArea = 0;
+      for (let i = 0; i < inside.length; i++) {
+        const p = paintOf(inside[i]);
+        if (!p) continue;
+        const b = inside[i].getBoundingClientRect();
+        if (b.width * b.height > bestArea) {
+          bestArea = b.width * b.height;
+          best = p;
+        }
+      }
+      return best;
+    };
     const keyOf = (n: Node | null) => {
       if (!n) return "gap";
-      return n.text ? "t:" + n.text : "c:" + (n.paint || "none");
+      if (n.shown) return "t:" + n.shown;
+      return "c:" + (innerPaint(n) || n.paint || "none");
     };
     for (const row of cells) for (const n of row) tally[keyOf(n)] = (tally[keyOf(n)] || 0) + 1;
 
@@ -254,7 +285,9 @@ export function project(options?: ProjectOptions): Projection {
     if (tally["gap"]) legend.push(`(blank)=no element x${tally["gap"]}`);
     lines.push("  legend: " + legend.join("  "));
 
-    const distinct = ranked.filter((k) => k !== "gap").length;
+    // A hole in the grid is itself something a person can see, so a board with
+    // gaps is not a board that ignored the position.
+    const distinct = ranked.filter((k) => k !== "gap").length + (tally["gap"] ? 1 : 0);
     if (distinct <= 1 && opts.varied) {
       problems.push(
         `every cell of the ${g.cols.length}x${g.rows.length} grid looks identical even though pieces have been played — render() is not reading the observation into the cells`,

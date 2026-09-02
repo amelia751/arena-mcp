@@ -73,6 +73,12 @@ const card = (extra = "") =>
 const base = `.board{width:300px;background:#222;padding:8px;color:#fff}.c{width:70px;height:60px;background:#444}
 .card{background:#333;padding:8px;width:120px}button{height:34px;background:#4a4;color:#000}`;
 
+const drops = `<div class="drops">${[1, 2, 3, 4, 5, 6, 7]
+  .map((n) => `<button data-action="col_${n - 1}">${n}</button>`)
+  .join("")}</div>`;
+const dropCss = `.drops{display:grid;grid-template-columns:repeat(7,44px);gap:4px;padding:10px;width:max-content}
+  .drops button{height:26px;background:#e8e2d4;color:#1c1814;border:0}`;
+
 for (const [what, args, expected] of [
   [
     "text rotated to face the other player",
@@ -108,6 +114,34 @@ for (const [what, args, expected] of [
       css: `.row{display:flex;gap:6px}button{width:90px;height:30px;background:#ddd;color:#111}`,
     },
     null,
+  ],
+  [
+    // Nesting the piece inside the square is the obvious way to write a board,
+    // and the projection used to call every one of them empty.
+    "discs nested inside the squares of the board",
+    {
+      html: `${drops}<div class="c4">${Array.from({ length: 42 }, (_, i) =>
+        i >= 35 && i <= 37
+          ? `<div class="sq"><div class="disc ${i === 36 ? "o" : "x"}"></div></div>`
+          : `<div class="sq"></div>`,
+      ).join("")}</div>`,
+      css: `${dropCss}.c4{display:grid;grid-template-columns:repeat(7,44px);gap:4px;background:#1b4a38;padding:10px;width:max-content}
+        .sq{width:44px;height:44px;border-radius:50%;background:#14392c;display:flex;align-items:center;justify-content:center}
+        .disc{width:38px;height:38px;border-radius:50%}
+        .disc.x{background:#d4a24a}.disc.o{background:#efe6d4}`,
+      moves: ["col_3"],
+    },
+    null,
+  ],
+  [
+    "a board that draws the same square whatever has been played",
+    {
+      html: `${drops}<div class="c4">${"<div class='sq'></div>".repeat(42)}</div>`,
+      css: `${dropCss}.c4{display:grid;grid-template-columns:repeat(7,44px);gap:4px;background:#1b4a38;padding:10px;width:max-content}
+        .sq{width:44px;height:44px;border-radius:50%;background:#14392c}`,
+      moves: ["col_3"],
+    },
+    /looks identical/,
   ],
   [
     "blank controls that colour tells apart",

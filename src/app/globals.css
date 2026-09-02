@@ -303,7 +303,136 @@ a {
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.seats {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.seat-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  line-height: 1.2;
+}
+
+.seat-chip.on {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.seat-chip-n {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.seat-chip.on .seat-chip-n {
+  color: var(--ink);
+}
+
+.seat-chip-who {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.seat-chip-score {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.desk-status {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
   margin-bottom: 1.3rem;
+}
+
+.last-move {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  animation: last-move-in 1.4s ease-out;
+}
+
+.last-move b {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+@keyframes last-move-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.dots {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 0.4rem;
+}
+
+.dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dot-pulse 1.1s ease-in-out infinite;
+}
+
+.dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The opening position is there to look at, not to click. */
+.table-idle {
+  opacity: 0.62;
+  filter: saturate(0.85);
+}
+
+.idle-note {
+  text-align: center;
+  margin-top: 0.8rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots i,
+  .last-move {
+    animation: none;
+  }
 }
 
 .desk-actions {

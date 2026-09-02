@@ -25,17 +25,24 @@ export function GameView({
     const root = el.shadowRoot ?? el.attachShadow({ mode: "open" });
     const clean = sanitizeView(view);
     root.innerHTML = `<style>
-:host{display:block;width:100%}
+:host{display:block;width:max-content;max-width:100%;margin-inline:auto}
 *{box-sizing:border-box}
 button{font:inherit;cursor:pointer}
 button:disabled{cursor:default}
+[data-action][aria-disabled="true"]{pointer-events:none;opacity:.35}
 ${clean.view.css}
 </style>${clean.view.html}`;
 
     for (const node of root.querySelectorAll<HTMLElement>("[data-action]")) {
       const id = node.getAttribute("data-action") || "";
-      if (disabled || !legal.includes(id)) node.setAttribute("disabled", "");
-      else node.removeAttribute("disabled");
+      const off = !!(disabled || !legal.includes(id));
+      if (off) {
+        node.setAttribute("disabled", "");
+        node.setAttribute("aria-disabled", "true");
+      } else {
+        node.removeAttribute("disabled");
+        node.removeAttribute("aria-disabled");
+      }
     }
 
     const onClick = (e: Event) => {

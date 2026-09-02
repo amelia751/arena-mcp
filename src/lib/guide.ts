@@ -37,8 +37,9 @@ You own the look. The surrounding page is warm paper (#f4efe6). Your board sits 
 Boards (Connect Four and similar): a dark green felt slab (#1b4a38) with rounded corners and
 circular holes (#14392c). Seat 0 discs gold (#d4a24a), seat 1 bone (#efe6d4), with a light
 radial highlight so they read as physical pieces. Drop controls above each column
-(data-action="col_N") with a small downward chevron. Set the board to width:max-content so
-the felt hugs the grid instead of stretching across the page.
+(data-action="col_N") with a small downward chevron. Wrap the controls and the board in one
+column with width:max-content so the felt hugs the grid and the drop targets sit on the
+columns. Use <button aria-label="Column N">, not an empty div.
 
 Notebook games: an ink hash (no outer box), serif X/O, opponent marks in rust (#b33a1a).
 

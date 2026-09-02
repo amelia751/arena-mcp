@@ -180,9 +180,10 @@ h2 {
 }
 
 .game-host {
-  width: 100%;
-  max-width: 36rem;
+  width: max-content;
+  max-width: 100%;
   min-height: 8rem;
+  margin-inline: auto;
 }
 
 .desk-bar {

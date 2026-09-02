@@ -10,11 +10,11 @@ export function VerifyPanel({
   players?: number;
 }) {
   if (!report) {
-    return <p className="muted">No validation run yet.</p>;
+    return <p className="muted">No report yet.</p>;
   }
   return (
-    <div className="verify">
-      <p className={`banner ${report.ok ? "ok" : "bad"}`}>
+    <div>
+      <p className={report.ok ? "ok" : "bad"}>
         {report.ok ? "All checks passed." : `${report.failures.length} check(s) failed.`}
       </p>
       <ul className="checks">
@@ -28,7 +28,7 @@ export function VerifyPanel({
       {report.playouts && (
         <p className="muted">
           {report.playouts.n} playouts · mean {report.playouts.mean_length} steps ·{" "}
-          {report.playouts.ms} ms · outcomes {report.playouts.balance.join(" / ")}
+          {report.playouts.ms} ms
         </p>
       )}
       <FlowMatrix rows={report.info_flow} players={players} />
@@ -39,8 +39,10 @@ export function VerifyPanel({
 export function FlowMatrix({ rows, players }: { rows: InfoFlowRow[]; players: number }) {
   if (!rows.length) return null;
   return (
-    <div className="matrix">
-      <p className="eyebrow">Information flow</p>
+    <div className="tape" style={{ marginTop: "1.4rem" }}>
+      <div className="tape-head">
+        <span>Information flow</span>
+      </div>
       <table>
         <thead>
           <tr>

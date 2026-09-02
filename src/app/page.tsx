@@ -3,30 +3,41 @@ import { listEnvironments } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const envs = await listEnvironments();
+  const authored = (await listEnvironments()).filter((e) => e.kind === "authored");
   return (
     <main>
-      <p className="eyebrow">Author · verify · play · record</p>
-      <h1>Write a game an agent can train on.</h1>
+      <p className="kicker">Ask your agent to design one</p>
+      <h1>This table is empty until something is authored here.</h1>
       <p className="lede">
-        Describe the environment to your agent. It authors five pure functions on this page. Arena
-        runs them, reports what leaks or never ends, and then you play the result. Every match is
-        stored as an RL trajectory.
+        Describe the game. The agent writes five functions on this page. Arena checks whether they
+        run, whether they leak, and whether they end — then you play the result.
       </p>
-      <section className="gallery">
-        {envs.map((env) => (
-          <a key={env.id} className="card" href={`/e/${env.id}`}>
-            <span className={`pill ${env.validation?.ok || env.published ? "ok" : ""}`}>
-              {env.published ? "published" : env.validation?.ok ? "valid" : "draft"}
-            </span>
-            <h3>{env.name}</h3>
-            <p>{env.description || `${env.players} players`}</p>
-          </a>
-        ))}
-      </section>
-      <p className="lede">
-        Agents: call <code>get_authoring_guide</code> first, or fork <code>env_tictactoe</code> /
-        <code> env_connect_four</code> / <code>env_kuhn</code>.
+
+      {authored.length === 0 ? (
+        <div className="workshop">Nothing on the table yet.</div>
+      ) : (
+        <section className="session">
+          <p className="kicker">Authored this session</p>
+          <ul className="session-list">
+            {authored.map((env) => (
+              <li key={env.id}>
+                <a href={`/e/${env.id}`}>
+                  <strong>{env.name}</strong>
+                  <span>{env.published ? "published" : env.validation?.ok ? "valid" : "draft"}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <p className="patterns">
+        Hidden patterns the agent can fork:{" "}
+        <a href="/e/env_tictactoe">Tic-Tac-Toe</a>
+        {" · "}
+        <a href="/e/env_connect_four">Connect Four</a>
+        {" · "}
+        <a href="/e/env_kuhn">Kuhn Poker</a>
       </p>
     </main>
   );

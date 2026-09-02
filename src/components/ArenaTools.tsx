@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import { snapshotDraft, snapshotLiveTable } from "@/lib/view-dom";
 
 const GUIDE =
-  "Return the five-function contract, UI node vocabulary, determinism rules, and a complete Tic-Tac-Toe example. Call this before writing any code.";
+  "Return the five-function contract, HTML/CSS render rules, preview_view / inspect_view loop, and a complete Tic-Tac-Toe example. Call this before writing any code.";
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, {
@@ -51,7 +52,8 @@ export function ArenaTools() {
       },
       {
         name: "list_environments",
-        description: "List environments with id, name, players, and validation status.",
+        description:
+          "List authored environments, plus hidden templates you may fork (env_tictactoe, env_connect_four, env_kuhn). Templates are patterns, not published products.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async () => clip(await api("/api/environments")),
@@ -325,6 +327,71 @@ export function ArenaTools() {
           if (input.environment_id) q.set("environment_id", String(input.environment_id));
           if (input.match_id) q.set("match_id", String(input.match_id));
           return clip(await api(`/api/episodes?${q}`), 4000);
+        },
+      },
+      {
+        name: "preview_view",
+        description:
+          "Mount HTML/CSS and return the accessibility tree of what painted. Pass html+css to try a draft, or environment_id to run that env's render(). Call this after every markup change.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            html: { type: "string", description: "Draft markup. Clickable nodes need data-action." },
+            css: { type: "string", description: "Draft stylesheet. No url() or @import." },
+            environment_id: { type: "string", description: "Run saved render() on init and snapshot it." },
+            seed: { type: "integer" },
+            interactive: { type: "boolean", description: "Only buttons and data-action nodes." },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: async ({ html, css, environment_id, seed, interactive }) => {
+          let view = {
+            html: typeof html === "string" ? html : "",
+            css: typeof css === "string" ? css : "",
+          };
+          let legal: string[] | undefined;
+          if (environment_id && !view.html) {
+            const q = new URLSearchParams();
+            if (seed != null) q.set("seed", String(seed));
+            const res = await api(`/api/environments/${environment_id}/view?${q}`);
+            if (res.error) return clip(res);
+            if (res.view) view = res.view;
+            legal = res.legal_actions;
+            if (!view.html) return clip(res, 2500);
+          }
+          if (!view.html) {
+            return JSON.stringify({
+              error: "Pass html or environment_id. Clickable elements need data-action matching legal ids.",
+            });
+          }
+          const snap = await snapshotDraft(view, {
+            interactive: !!interactive,
+            legal,
+          });
+          return clip({ ok: true, ...snap, legal_actions: legal ?? null }, 2500);
+        },
+      },
+      {
+        name: "inspect_view",
+        description:
+          "Read the accessibility tree of the live table on this page — the same loop as a snapshot after you write HTML. Sit down or call preview_view first.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            interactive: { type: "boolean", description: "Only buttons and data-action nodes." },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
+        execute: async ({ interactive }) => {
+          const snap = snapshotLiveTable({ interactive: !!interactive });
+          if (!snap) {
+            return JSON.stringify({
+              error: "No table is mounted. Call preview_view, or start_match / sit down, then inspect_view.",
+            });
+          }
+          return clip(snap, 2500);
         },
       },
     ];

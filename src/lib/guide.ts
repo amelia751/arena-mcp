@@ -23,16 +23,18 @@ step(state, action) -> { state, rewards, terminal }
   Throw if action is not in legal_actions(state, state.to_move).
   On a win, rewards are typically [1,-1] or [-1,1]. Draws [0,0].
 
-render(observation) -> UI tree
-  Constrained JSON, not HTML. Node types:
-  column, row { children }
-  grid { rows, cols, cells, palette? }   cells is a 2D array of strings
-  hand { cards, facedown? }
-  stat { label, value }
-  text { text }
-  actions { items?: [{id, label}] }      omit items to use legal_actions
-  log { lines }
-  badge { text, tone? }
+render(observation) -> { html, css }
+  You write the table. Return HTML and CSS strings. No <script>, no event handlers, no url().
+  Put data-action="<legal id>" on every clickable control. The page hosts your markup in a
+  sandbox and wires clicks to take_action.
+  After you change markup: preview_view({ html, css }) to read the accessibility tree of what
+  painted. After a match is up: inspect_view() for the live table.
+
+## Seeing what you built
+
+preview_view — mount a draft (or environment_id to run saved render) and return the tree.
+inspect_view — snapshot the live table on this page.
+Same loop as writing HTML then reading a page snapshot. Do not guess at layout — look.
 
 ## Determinism
 
@@ -73,28 +75,26 @@ function step(state, action) {
   return { state: next, rewards: [0,0], terminal: false };
 }
 function render(observation) {
-  var cells = [];
-  for (var r = 0; r < 3; r++) {
-    var row = [];
-    for (var c = 0; c < 3; c++) {
-      var v = observation.board[r * 3 + c];
-      row.push(v === 0 ? "x" : v === 1 ? "o" : "");
-    }
-    cells.push(row);
+  var html = "<div class='ttt'><div class='board'>";
+  for (var i = 0; i < 9; i++) {
+    var v = observation.board[i];
+    var mark = v === 0 ? "X" : v === 1 ? "O" : "";
+    var cls = v === 0 ? "x" : v === 1 ? "o" : "empty";
+    html += "<button class='cell " + cls + "' data-action='cell_" + i + "'>" + mark + "</button>";
   }
-  return { type: "column", children: [
-    { type: "grid", rows: 3, cols: 3, cells: cells, palette: { x: "amber", o: "sky" } },
-    { type: "actions" }
-  ]};
+  html += "</div><p>" + (observation.to_move === observation.you_are ? "your turn" : "waiting") + "</p></div>";
+  var css = ".ttt{display:flex;flex-direction:column;align-items:center;gap:12px}.board{display:grid;grid-template-columns:repeat(3,54px)}.cell{width:54px;height:54px;border:0;border-right:2.5px solid #1c1814;border-bottom:2.5px solid #1c1814;background:#faf6ee;font:28px Georgia,serif}.cell:nth-child(3n){border-right:0}.cell:nth-child(n+7){border-bottom:0}.cell.o{color:#b33a1a}";
+  return { html: html, css: css };
 }
 
 ## How to author
 
 1. Call create_environment with a name and as many functions as you have. Partial is fine.
-2. Read the validation failures. They name the function and the line.
-3. Patch one function at a time with update_environment.
-4. When checks pass, call describe_dataset, then publish_environment.
-5. start_match + take_action to play. Prefer forking env_tictactoe or env_connect_four if you are adapting a known game.
+2. Write render as { html, css }. Call preview_view after each markup change.
+3. Read the validation failures. They name the function and the line.
+4. Patch one function at a time with update_environment.
+5. inspect_view once a match is up. When checks pass, describe_dataset, then publish_environment.
+6. Hidden templates you may fork: env_tictactoe, env_connect_four, env_kuhn.
 
-Connect Four from Tic-Tac-Toe: 6×7 board, actions col_0..col_6, win is four in a row, gravity (fill from the bottom).
+Connect Four: 6×7, actions col_0..col_6, four in a row, gravity (fill from the bottom).
 `;

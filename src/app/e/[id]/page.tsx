@@ -1,7 +1,7 @@
 import { getEnvironment } from "@/lib/store";
 import { notFound } from "next/navigation";
 import { PlayDesk } from "@/components/PlayDesk";
-import { VerifyPanel } from "@/components/VerifyPanel";
+import { EnvTabs } from "@/components/EnvTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -16,29 +16,21 @@ export default async function EnvironmentPage({
 
   return (
     <main>
-      <p className="eyebrow">{env.published ? "Published" : "Draft"} · {env.id}</p>
-      <h1>{env.name}</h1>
-      <p className="lede">{env.description}</p>
-      <p className="muted">
-        revision {env.revision} · {env.code_hash.slice(0, 19)} · {env.players} seats
-      </p>
-      <div className="tabs" style={{ marginTop: "1.2rem" }}>
-        <a className="on" href={`/e/${env.id}`}>
-          Play
-        </a>
-        <a href={`/e/${env.id}/verify`}>Verify</a>
-        <a href={`/e/${env.id}/spec`}>Spec</a>
-      </div>
-      <div className="layout-2">
-        <PlayDesk environmentId={env.id} />
-        <aside className="side">
-          <p className="eyebrow">Validation</p>
-          <VerifyPanel report={env.validation} players={env.players} />
-        </aside>
-      </div>
-      <p className="record-note">
-        Matches on this page are recorded as anonymous trajectories. Download the JSONL from the
-        panel, or ask an agent to call export_episodes.
+      <header className="env-head">
+        <p className="kicker">
+          {env.kind === "template" ? "Pattern" : env.published ? "Published" : "Draft"}
+        </p>
+        <h1>{env.name}</h1>
+        {env.description && <p className="lede">{env.description}</p>}
+        <p className="meta">
+          {env.id} · rev {env.revision} · {env.players} seats
+        </p>
+      </header>
+      <EnvTabs id={env.id} current="play" />
+      <PlayDesk environmentId={env.id} />
+      <p className="note">
+        Every move is written to a trajectory. Ask the agent for export_episodes, or download the
+        tape under the board.
       </p>
     </main>
   );

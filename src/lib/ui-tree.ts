@@ -10,13 +10,17 @@ const NODE_TYPES = new Set([
   "badge",
 ]);
 
+export type Skin = "felt" | "paper" | "ink";
+
 export type UINode = {
   type: string;
+  skin?: Skin;
   children?: UINode[];
   rows?: number;
   cols?: number;
   cells?: unknown;
   palette?: Record<string, string>;
+  marks?: Record<string, string>;
   cards?: unknown[];
   facedown?: number;
   label?: string;
@@ -26,6 +30,13 @@ export type UINode = {
   lines?: string[];
   tone?: string;
 };
+
+export const SKINS = new Set<Skin>(["felt", "paper", "ink"]);
+
+export function readSkin(node: UINode | null | undefined): Skin {
+  const s = node?.skin;
+  return s && SKINS.has(s) ? s : "paper";
+}
 
 export function validateUITree(node: unknown, path = "render"): string[] {
   const errors: string[] = [];

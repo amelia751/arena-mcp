@@ -4,6 +4,7 @@ import { getEnvironment, listEnvironments, putEnvironment } from "./store";
 import { validateEnvironment } from "./validate";
 import { AUTHORING_GUIDE } from "./guide";
 import { withRealm } from "./sandbox";
+import { parseRender, sanitizeView } from "./view";
 
 function mergeCode(base: EnvCode, patch?: EnvCodePatch): EnvCode {
   const next = { ...base };
@@ -22,6 +23,7 @@ function publicEnv(env: Environment) {
     players: env.players,
     revision: env.revision,
     code_hash: env.code_hash,
+    kind: env.kind ?? "authored",
     published: env.published,
     confirmed_info_flow: env.confirmed_info_flow,
     validation: env.validation
@@ -42,9 +44,60 @@ export function getAuthoringGuide() {
   return { guide: AUTHORING_GUIDE, example_id: "env_tictactoe" };
 }
 
+export async function previewEnv(id: string, seed = 0, seat = 0) {
+  const env = await getEnvironment(id);
+  if (!env) return { error: "environment not found", status: 404 as const };
+  try {
+    return await withRealm(env.code, (realm) => {
+      const state = realm.call("__init", { seed });
+      const observation = realm.call("__observe", { state, player: seat });
+      const legal = realm.call<string[]>("__legal", { state, player: seat });
+      const rendered = realm.call("__render", { observation });
+      const parsed = parseRender(rendered);
+      if (parsed.kind === "html") {
+        const clean = sanitizeView(parsed.view);
+        return {
+          environment_id: env.id,
+          seed,
+          seat,
+          observation,
+          legal_actions: legal,
+          view: clean.view,
+          stripped: clean.stripped,
+        };
+      }
+      return {
+        environment_id: env.id,
+        seed,
+        seat,
+        observation,
+        legal_actions: legal,
+        render: rendered,
+        note: "render returned a UI tree. Rewrite it to { html, css } so you can style the table.",
+      };
+    });
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : String(e),
+      status: 400 as const,
+    };
+  }
+}
+
 export async function listEnvs() {
   const rows = await listEnvironments();
-  return { environments: rows.map(publicEnv) };
+  return {
+    environments: rows.filter((e) => e.kind !== "template").map(publicEnv),
+    templates: rows
+      .filter((e) => e.kind === "template")
+      .map((e) => ({
+        id: e.id,
+        name: e.name,
+        description: e.description,
+        role: "template",
+        note: "Hidden pattern. Fork it — do not treat it as a finished environment.",
+      })),
+  };
 }
 
 export async function getEnv(id: string, fn?: keyof EnvCode) {
@@ -84,6 +137,7 @@ export async function createEnv(input: {
     code,
     revision: 1,
     code_hash: codeHash(code),
+    kind: "authored",
     published: false,
     confirmed_info_flow: false,
     validation,
@@ -103,9 +157,9 @@ export async function updateEnv(input: {
 }) {
   const env = await getEnvironment(input.id);
   if (!env) return { error: "environment not found", status: 404 as const };
-  if (env.published) {
+  if (env.kind === "template" || env.published) {
     return {
-      error: "published environments are immutable — fork_environment instead",
+      error: "templates and published environments are immutable — fork_environment instead",
       status: 409 as const,
     };
   }
@@ -140,6 +194,7 @@ export async function forkEnv(input: { source_id: string; name: string }) {
     ...src,
     id: nid("env"),
     name: input.name.trim(),
+    kind: "authored",
     published: false,
     confirmed_info_flow: false,
     revision: 1,

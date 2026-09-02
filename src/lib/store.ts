@@ -44,8 +44,11 @@ async function load(): Promise<DB> {
     const raw = await readFile(/*turbopackIgnore: true*/ FILE, "utf8");
     mem = JSON.parse(raw) as DB;
     memMtime = mtime;
-    for (const e of referenceEnvironments()) {
-      if (!mem.environments[e.id]) mem.environments[e.id] = e;
+    const templates = new Set(referenceEnvironments().map((e) => e.id));
+    for (const e of referenceEnvironments()) mem.environments[e.id] = e;
+    for (const [id, row] of Object.entries(mem.environments)) {
+      if (templates.has(id)) continue;
+      row.kind = "authored";
     }
     return mem;
   } catch {

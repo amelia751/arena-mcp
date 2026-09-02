@@ -34,20 +34,16 @@ export const TICTACTOE_CODE: EnvCode = {
   return { state: next, rewards: [0, 0], terminal: false };
 }`,
   render: `function render(observation) {
-  var cells = [];
-  for (var r = 0; r < 3; r++) {
-    var row = [];
-    for (var c = 0; c < 3; c++) {
-      var v = observation.board[r * 3 + c];
-      row.push(v === 0 ? "x" : v === 1 ? "o" : "");
-    }
-    cells.push(row);
+  var html = "<div class='ttt'><div class='board'>";
+  for (var i = 0; i < 9; i++) {
+    var v = observation.board[i];
+    var mark = v === 0 ? "X" : v === 1 ? "O" : "";
+    var cls = v === 0 ? "x" : v === 1 ? "o" : "empty";
+    html += "<button class='cell " + cls + "' data-action='cell_" + i + "' aria-label='Cell " + (i + 1) + "'>" + mark + "</button>";
   }
-  return { type: "column", children: [
-    { type: "grid", rows: 3, cols: 3, cells: cells, palette: { x: "amber", o: "sky" } },
-    { type: "stat", label: "to move", value: observation.to_move === observation.you_are ? "you" : "opponent" },
-    { type: "actions" }
-  ]};
+  html += "</div><p class='who'>" + (observation.to_move === observation.you_are ? "your turn" : "waiting") + "</p></div>";
+  var css = ".ttt{display:flex;flex-direction:column;align-items:center;gap:12px}.board{display:grid;grid-template-columns:repeat(3,54px)}.cell{width:54px;height:54px;border:0;border-right:2.5px solid #1c1814;border-bottom:2.5px solid #1c1814;background:#faf6ee;font:28px Georgia,serif;color:#1c1814}.cell:nth-child(3n){border-right:0}.cell:nth-child(n+7){border-bottom:0}.cell.o{color:#b33a1a}.who{margin:0;color:#6e675c;font-size:14px}";
+  return { html: html, css: css };
 }`,
 };
 
@@ -94,19 +90,19 @@ export const CONNECT_FOUR_CODE: EnvCode = {
   return { state: next, rewards: [0, 0], terminal: false };
 }`,
   render: `function render(observation) {
-  var cells = [];
+  var html = "<div class='c4'><div class='drops'>";
+  for (var c = 0; c < 7; c++) html += "<button class='drop' data-action='col_" + c + "' aria-label='Column " + (c + 1) + "'></button>";
+  html += "</div><div class='board'>";
   for (var r = 0; r < 6; r++) {
-    var row = [];
     for (var c = 0; c < 7; c++) {
       var v = observation.board[r][c];
-      row.push(v === 0 ? "x" : v === 1 ? "o" : "");
+      var mark = v === 0 ? "x" : v === 1 ? "o" : "";
+      html += "<span class='cell " + mark + "'></span>";
     }
-    cells.push(row);
   }
-  return { type: "column", children: [
-    { type: "grid", rows: 6, cols: 7, cells: cells, palette: { x: "amber", o: "sky" } },
-    { type: "actions" }
-  ]};
+  html += "</div></div>";
+  var css = ".c4{display:flex;flex-direction:column;align-items:center}.drops{display:grid;grid-template-columns:repeat(7,40px);margin-bottom:6px}.drop{height:16px;border:0;background:transparent;position:relative}.drop:not(:disabled):after{content:'';position:absolute;left:50%;top:2px;transform:translateX(-50%);border:5px solid transparent;border-top-color:#f4efe6}.board{display:grid;grid-template-columns:repeat(7,40px);gap:5px;padding:14px;background:#1b4a38;border-radius:18px}.cell{width:40px;height:40px;border-radius:50%;background:#14392c;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}.cell.x{background:radial-gradient(circle at 32% 28%,#f3d37a,#d4a24a 62%,#a87a20);box-shadow:none}.cell.o{background:radial-gradient(circle at 32% 28%,#fffaf0,#efe6d4 60%,#c9bea6);box-shadow:none}";
+  return { html: html, css: css };
 }`,
 };
 
@@ -163,13 +159,14 @@ export const KUHN_CODE: EnvCode = {
 }`,
   render: `function render(observation) {
   var ranks = ["J", "Q", "K"];
-  return { type: "column", children: [
-    { type: "hand", cards: [ranks[observation.your_card] || String(observation.your_card)] },
-    { type: "stat", label: "pot", value: observation.pot },
-    { type: "log", lines: observation.history },
-    { type: "badge", text: observation.to_move === observation.you_are ? "your turn" : "waiting", tone: "amber" },
-    { type: "actions" }
-  ]};
+  var card = ranks[observation.your_card] || String(observation.your_card);
+  var hist = (observation.history || []).join(" · ");
+  var html = "<div class='kp'><div class='card'>" + card + "</div><p class='pot'>pot " + observation.pot + "</p>";
+  if (hist) html += "<p class='log'>" + hist + "</p>";
+  html += "<p class='badge'>" + (observation.to_move === observation.you_are ? "your turn" : "waiting") + "</p>";
+  html += "<div class='moves'><button data-action='check'>check</button><button data-action='bet'>bet</button><button data-action='call'>call</button><button data-action='fold'>fold</button></div></div>";
+  var css = ".kp{display:flex;flex-direction:column;align-items:center;gap:10px}.card{width:50px;height:70px;border-radius:6px;background:#fbf7ef;box-shadow:0 8px 18px rgba(28,24,20,.14);display:flex;align-items:flex-start;padding:6px 8px;font:22px Georgia,serif}.pot,.log,.badge{margin:0;color:#6e675c;font-size:14px}.moves{display:flex;gap:8px}.moves button{background:#1c1814;color:#f4efe6;border:0;border-radius:999px;padding:6px 14px;font-size:14px}.moves button:disabled{opacity:.3}";
+  return { html: html, css: css };
 }`,
 };
 
@@ -188,7 +185,8 @@ function env(
     code,
     revision: 1,
     code_hash: codeHash(code),
-    published: true,
+    kind: "template",
+    published: false,
     confirmed_info_flow: true,
     validation: null,
     created_at: t,

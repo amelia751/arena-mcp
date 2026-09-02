@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { GameView } from "./GameView";
 import { UiTree } from "./UiTree";
 import type { UINode } from "@/lib/ui-tree";
+import type { AuthoredView } from "@/lib/view";
 
 type MatchView = {
   match: {
@@ -16,7 +18,8 @@ type MatchView = {
   observation?: {
     observation: unknown;
     legal_actions: string[];
-    ui: UINode;
+    ui?: UINode;
+    view?: AuthoredView;
     seat: number;
     revision: number;
   };
@@ -27,7 +30,6 @@ type MatchView = {
     reward: number;
     terminal: boolean;
     legal_actions: string[];
-    observation: unknown;
     latency_ms: number;
   }>;
 };
@@ -70,7 +72,7 @@ export function PlayDesk({
     }
   }
 
-  async function act(action: string, iface: "human_ui" | "bot" = "human_ui") {
+  async function act(action: string) {
     if (!view) return;
     setBusy(true);
     setErr(null);
@@ -81,7 +83,7 @@ export function PlayDesk({
         body: JSON.stringify({
           action,
           expected_revision: view.match.revision,
-          interface: iface,
+          interface: "human_ui",
           latency_ms: clickedAt ? Date.now() - clickedAt : undefined,
         }),
       }).then((r) => r.json());
@@ -117,47 +119,42 @@ export function PlayDesk({
     if (view.match.to_move === humanSeat) return;
     const t = setTimeout(() => {
       void bot();
-    }, 350);
+    }, 280);
     return () => clearTimeout(t);
   }, [view?.match.revision, view?.match.to_move, view?.match.terminal]);
 
   const yourTurn = view && !view.match.terminal && view.match.to_move === humanSeat;
 
   return (
-    <section className="desk">
-      <header className="desk-head">
-        <div>
-          <p className="eyebrow">Play</p>
-          <h2>{view?.match.environment_name ?? "New match"}</h2>
-        </div>
-        <div className="desk-actions">
-          <button type="button" className="act ghost" onClick={start} disabled={busy}>
-            {view ? "New match" : "Start match"}
-          </button>
-          {view && !view.match.terminal && view.match.to_move !== humanSeat && (
-            <button type="button" className="act ghost" onClick={bot} disabled={busy}>
-              Bot move
-            </button>
-          )}
-        </div>
-      </header>
-
-      {!view && (
-        <p className="lede">
-          Seat 0 is you. Seat 1 is the built-in random bot — or an agent using the play tools on
-          this page.
+    <section className="table-wrap">
+      <div className="desk-bar">
+        <p className="kicker">
+          {!view
+            ? "Seat 0 is you. Seat 1 is the bot, or the agent on this page."
+            : view.match.terminal
+              ? `Over · ${view.match.rewards.map((r) => (r > 0 ? `+${r}` : r)).join(" / ")}`
+              : yourTurn
+                ? "Your turn"
+                : "Waiting"}
         </p>
-      )}
+        <button type="button" className="quiet" onClick={start} disabled={busy}>
+          {view ? "Deal again" : "Sit down"}
+        </button>
+      </div>
 
       {err && <p className="err">{err}</p>}
 
-      {view?.match.terminal && (
-        <p className="banner">
-          Game over. Returns {view.match.rewards.map((r) => (r > 0 ? `+${r}` : r)).join(" / ")}.
-        </p>
-      )}
-
-      {view?.observation && (
+      {view?.observation?.view?.html ? (
+        <GameView
+          view={view.observation.view}
+          legal={yourTurn ? view.observation.legal_actions : []}
+          disabled={busy || !yourTurn}
+          onAction={(id) => {
+            setClickedAt(Date.now());
+            void act(id);
+          }}
+        />
+      ) : view?.observation?.ui ? (
         <UiTree
           node={view.observation.ui}
           legal={yourTurn ? view.observation.legal_actions : []}
@@ -167,13 +164,13 @@ export function PlayDesk({
             void act(id);
           }}
         />
-      )}
+      ) : null}
 
       {view && (
-        <div className="data-panel">
-          <div className="data-head">
-            <p className="eyebrow">Trajectory</p>
-            <a href={`/api/episodes?match_id=${view.match.id}&format=jsonl`}>Download JSONL</a>
+        <div className="tape">
+          <div className="tape-head">
+            <span>Trajectory · {view.steps?.length ?? 0} steps</span>
+            <a href={`/api/episodes?match_id=${view.match.id}&format=jsonl`}>JSONL</a>
           </div>
           <table>
             <thead>
@@ -197,13 +194,6 @@ export function PlayDesk({
                   <td>{s.latency_ms}</td>
                 </tr>
               ))}
-              {!view.steps?.length && (
-                <tr>
-                  <td colSpan={6} className="muted">
-                    Rows appear as each move is played.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>

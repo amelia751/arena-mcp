@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { ArenaTools } from "@/components/ArenaTools";
 import "./globals.css";
 
@@ -13,17 +13,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const serif = Instrument_Serif({
+  variable: "--font-serif",
+  subsets: ["latin"],
+  weight: "400",
+});
+
 export const metadata: Metadata = {
   title: "Arena",
-  description:
-    "Author a game environment, verify it, play it, and keep the trajectory data.",
+  description: "Describe a game. Your agent authors it. You play what it built.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${serif.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         <ArenaTools />
@@ -32,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <a className="wordmark" href="/">
               Arena
             </a>
-            <span className="muted">Environments you can train against</span>
+            <span>A table for games you have not written yet</span>
           </nav>
           {children}
         </div>

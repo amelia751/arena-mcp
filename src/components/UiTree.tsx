@@ -1,12 +1,6 @@
 "use client";
 
-import type { UINode } from "@/lib/ui-tree";
-
-const PALETTE: Record<string, string> = {
-  amber: "var(--piece-a)",
-  sky: "var(--piece-b)",
-  ink: "var(--ink)",
-};
+import { readSkin, type Skin, type UINode } from "@/lib/ui-tree";
 
 export function UiTree({
   node,
@@ -20,7 +14,12 @@ export function UiTree({
   disabled?: boolean;
 }) {
   if (!node) return null;
-  return <Node n={node} legal={legal} onAction={onAction} disabled={disabled} />;
+  const skin = readSkin(node);
+  return (
+    <div className="table" data-skin={skin}>
+      <Node n={node} legal={legal} onAction={onAction} disabled={disabled} skin={skin} />
+    </div>
+  );
 }
 
 function Node({
@@ -28,43 +27,43 @@ function Node({
   legal,
   onAction,
   disabled,
+  skin,
 }: {
   n: UINode;
   legal: string[];
   onAction?: (id: string) => void;
   disabled?: boolean;
+  skin: Skin;
 }) {
   switch (n.type) {
     case "column":
       return (
-        <div className="flex flex-col gap-3">
+        <div className="stack">
           {n.children?.map((c, i) => (
-            <Node key={i} n={c} legal={legal} onAction={onAction} disabled={disabled} />
+            <Node key={i} n={c} legal={legal} onAction={onAction} disabled={disabled} skin={skin} />
           ))}
         </div>
       );
     case "row":
       return (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="spread">
           {n.children?.map((c, i) => (
-            <Node key={i} n={c} legal={legal} onAction={onAction} disabled={disabled} />
+            <Node key={i} n={c} legal={legal} onAction={onAction} disabled={disabled} skin={skin} />
           ))}
         </div>
       );
     case "grid":
-      return <Grid n={n} legal={legal} onAction={onAction} disabled={disabled} />;
+      return <Grid n={n} legal={legal} onAction={onAction} disabled={disabled} skin={skin} />;
     case "hand":
       return (
-        <div className="flex gap-2">
+        <div className="hand">
           {(n.cards ?? []).map((card, i) => (
-            <span key={i} className="card-face">
-              {String(card)}
+            <span key={i} className="playing-card">
+              <em>{String(card)}</em>
             </span>
           ))}
           {Array.from({ length: n.facedown ?? 0 }).map((_, i) => (
-            <span key={`d${i}`} className="card-face facedown">
-              ?
-            </span>
+            <span key={`d${i}`} className="playing-card back" />
           ))}
         </div>
       );
@@ -86,24 +85,25 @@ function Node({
         </ol>
       );
     case "badge":
-      return <span className={`badge tone-${n.tone || "ink"}`}>{n.text}</span>;
+      return <span className="badge">{n.text}</span>;
     case "actions":
       if (legal.some((a) => a.startsWith("col_"))) return null;
       return (
-        <div className="flex flex-wrap gap-2">
-          {(n.items && n.items.length ? n.items : legal.map((id) => ({ id, label: labelFor(id) }))).map(
-            (item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="act"
-                disabled={disabled || !legal.includes(item.id)}
-                onClick={() => onAction?.(item.id)}
-              >
-                {item.label}
-              </button>
-            ),
-          )}
+        <div className="moves">
+          {(n.items && n.items.length
+            ? n.items
+            : legal.map((id) => ({ id, label: labelFor(id) }))
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="move"
+              disabled={disabled || !legal.includes(item.id)}
+              onClick={() => onAction?.(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       );
     default:
@@ -116,23 +116,25 @@ function Grid({
   legal,
   onAction,
   disabled,
+  skin,
 }: {
   n: UINode;
   legal: string[];
   onAction?: (id: string) => void;
   disabled?: boolean;
+  skin: Skin;
 }) {
   const rows = n.rows ?? 0;
   const cols = n.cols ?? 0;
   const cells = Array.isArray(n.cells) ? n.cells : [];
-  const palette = n.palette ?? { x: "amber", o: "sky" };
   const dropCols = legal.some((a) => a.startsWith("col_"));
   const cellActions = legal.some((a) => a.startsWith("cell_"));
+  const size = skin === "felt" && cols >= 6 ? "2.55rem" : skin === "paper" ? "3.4rem" : "2.85rem";
 
   return (
     <div className="grid-wrap">
       {dropCols && (
-        <div className="grid-drops" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        <div className="drops" style={{ gridTemplateColumns: `repeat(${cols}, ${size})` }}>
           {Array.from({ length: cols }).map((_, c) => {
             const id = `col_${c}`;
             return (
@@ -142,35 +144,29 @@ function Grid({
                 className="drop"
                 disabled={disabled || !legal.includes(id)}
                 onClick={() => onAction?.(id)}
-              >
-                {c + 1}
-              </button>
+                aria-label={`Column ${c + 1}`}
+              />
             );
           })}
         </div>
       )}
-      <div
-        className="board"
-        style={{ gridTemplateColumns: `repeat(${cols}, 2.15rem)` }}
-      >
+      <div className="board" style={{ gridTemplateColumns: `repeat(${cols}, ${size})` }}>
         {Array.from({ length: rows }).map((_, r) =>
           Array.from({ length: cols }).map((_, c) => {
             const row = Array.isArray(cells[r]) ? (cells[r] as unknown[]) : [];
-            const raw = row[c];
-            const mark = raw === 0 || raw === "x" || raw === "X" ? "x" : raw === 1 || raw === "o" || raw === "O" ? "o" : raw == null || raw === "" ? "" : String(raw);
+            const mark = normalize(row[c]);
             const id = `cell_${r * cols + c}`;
             const clickable = cellActions && legal.includes(id);
-            const color = mark ? PALETTE[palette[mark] ?? mark] ?? "var(--ink)" : undefined;
+            const letter = n.marks?.[mark] ?? (skin === "paper" ? mark.toUpperCase() : "");
             return (
               <button
                 key={`${r}-${c}`}
                 type="button"
-                className={`cell ${mark ? "filled" : ""}`}
-                style={color ? { color } : undefined}
+                className={`cell ${mark ? `has-${mark}` : "empty"}`}
                 disabled={disabled || !clickable}
                 onClick={() => clickable && onAction?.(id)}
               >
-                {mark === "x" ? "●" : mark === "o" ? "●" : mark}
+                {skin === "paper" ? letter : null}
               </button>
             );
           }),
@@ -180,8 +176,15 @@ function Grid({
   );
 }
 
+function normalize(raw: unknown): string {
+  if (raw === 0 || raw === "x" || raw === "X") return "x";
+  if (raw === 1 || raw === "o" || raw === "O") return "o";
+  if (raw == null || raw === "") return "";
+  return String(raw);
+}
+
 function labelFor(id: string) {
-  if (id.startsWith("col_")) return `Column ${Number(id.slice(4)) + 1}`;
-  if (id.startsWith("cell_")) return `Cell ${Number(id.slice(5)) + 1}`;
+  if (id.startsWith("col_")) return String(Number(id.slice(4)) + 1);
+  if (id.startsWith("cell_")) return String(Number(id.slice(5)) + 1);
   return id.replace(/_/g, " ");
 }

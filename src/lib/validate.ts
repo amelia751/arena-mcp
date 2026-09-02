@@ -6,6 +6,7 @@ import type {
 } from "./types";
 import { SandboxError, withRealm } from "./sandbox";
 import { validateUITree } from "./ui-tree";
+import { parseRender, validateAuthoredView } from "./view";
 
 const LEAK_NAME = /(rng|seed|cursor|secret|private|hidden|burned|deck|internal)/i;
 
@@ -236,16 +237,40 @@ export async function validateEnvironment(
               detail: `V6: render: ${renderErr}`,
             });
           } else {
-            const treeErrors = validateUITree(renderNode);
-            push({
-              id: "V6",
-              ok: treeErrors.length === 0,
-              summary:
-                treeErrors.length === 0
-                  ? "render returns a valid UI tree"
-                  : "render returned an invalid UI tree",
-              detail: treeErrors[0],
-            });
+            const parsed = parseRender(renderNode);
+            if (parsed.kind === "html") {
+              const viewErrors = validateAuthoredView(
+                parsed.view,
+                sweep.sample?.last_legal,
+              );
+              push({
+                id: "V6",
+                ok: viewErrors.length === 0,
+                summary:
+                  viewErrors.length === 0
+                    ? "render returns HTML/CSS the table can host"
+                    : "render HTML failed the view checks",
+                detail: viewErrors[0],
+              });
+            } else if (parsed.kind === "tree") {
+              const treeErrors = validateUITree(parsed.tree);
+              push({
+                id: "V6",
+                ok: treeErrors.length === 0,
+                summary:
+                  treeErrors.length === 0
+                    ? "render returns a legacy UI tree — prefer { html, css }"
+                    : "render returned an invalid UI tree",
+                detail: treeErrors[0],
+              });
+            } else {
+              push({
+                id: "V6",
+                ok: false,
+                summary: "render must return { html, css }",
+                detail: parsed.errors[0],
+              });
+            }
           }
         }
       } catch (e) {

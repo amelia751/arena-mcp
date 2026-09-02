@@ -13,8 +13,9 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. Three reference environments are already published: Tic-Tac-Toe,
-Connect Four, and Kuhn Poker.
+Open http://localhost:3000. The table starts empty. Ask an agent to design a game. Hidden
+patterns (`env_tictactoe`, `env_connect_four`, `env_kuhn`) can be forked; they are not listed as
+finished products.
 
 ## The environment contract
 
@@ -23,22 +24,28 @@ init(seed)                   -> state
 legal_actions(state, player) -> string[]
 observe(state, player)       -> observation
 step(state, action)          -> { state, rewards, terminal }
-render(observation)          -> UI tree
+render(observation)          -> { html, css }
 ```
 
 Functions are pure. `Date`, `Math.random`, and I/O are unavailable. Use the injected `rng(n)` if
 the game needs chance, and keep a `rng_cursor` on state.
 
+`render` returns HTML and CSS. Clickable nodes use `data-action` matching a legal action id. The
+page hosts that markup in a sandbox. The agent reads what painted with `preview_view` (draft) and
+`inspect_view` (live table).
+
 Publishing runs V0–V6: the code runs, the same seed replays, illegal actions are rejected,
 random playouts terminate, `observe` does not leak another seat's private fields, and `render`
-returns a known UI tree.
+returns hostable HTML.
 
 ## Tools
 
 | Tool | What it does |
 | --- | --- |
-| `get_authoring_guide` | Contract, UI vocabulary, worked Tic-Tac-Toe |
-| `list_environments` | Gallery |
+| `get_authoring_guide` | Contract, HTML/CSS render rules, worked Tic-Tac-Toe |
+| `preview_view` | Mount HTML/CSS (or a saved render) and return the accessibility tree |
+| `inspect_view` | Snapshot the live table on this page |
+| `list_environments` | Authored environments, plus hidden fork templates |
 | `get_environment` | Spec and source, optionally one function |
 | `create_environment` | New draft; validation runs immediately |
 | `fork_environment` | Copy a validated environment |

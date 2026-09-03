@@ -22,8 +22,8 @@ const flag = (name) => argv.includes(`--${name}`);
 const BASE = arg("base", process.env.ARENA_BASE || "http://localhost:3000");
 const TASK = arg("task", "connect4");
 const MAX_TURNS = Number(arg("turns", 24));
-const PROJECT = "your-project-id";
-const LOCATION = "us-central1";
+const PROJECT = arg("project", process.env.GOOGLE_CLOUD_PROJECT || "");
+const LOCATION = arg("location", process.env.GOOGLE_CLOUD_LOCATION || "us-central1");
 const MODEL = arg("model", "gemini-2.5-pro");
 const RUN = arg("run", String(Date.now()).slice(-6));
 
@@ -87,6 +87,11 @@ function token() {
 }
 
 async function generate(contents, declarations, system) {
+  if (!PROJECT) {
+    throw new Error(
+      "No Google Cloud project. Set GOOGLE_CLOUD_PROJECT or pass --project <id>.",
+    );
+  }
   const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT}/locations/${LOCATION}/publishers/google/models/${MODEL}:generateContent`;
   for (let attempt = 1; attempt <= 4; attempt++) {
     const res = await fetch(url, {

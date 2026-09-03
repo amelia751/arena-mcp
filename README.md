@@ -6,6 +6,8 @@ agent, and keep the match as reinforcement-learning trajectories.
 The human uses the board. An agent on the same page uses tools registered on
 `document.modelContext`. Both write into one dataset.
 
+![A person and an agent share one page. The agent authors five environment functions that run in a sandbox, validation gates publishing, and both sides write one trajectory dataset.](docs/architecture.jpg)
+
 ## Run
 
 ```bash

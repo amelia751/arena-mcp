@@ -40,13 +40,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# cursor rules
-/.cursor/rules/
+# editor and assistant configuration
+/.cursor/
+/AGENTS.md
+/CLAUDE.md
 
 # planning notes
 /ROADMAP.md
-
-# contest writeup — keep out of the public repo
 /submission/
 
 # credentials

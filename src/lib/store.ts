@@ -156,7 +156,11 @@ async function listCached<T>(prefix: string): Promise<T[]> {
     pending = migrate()
       .then(() => readAll<T>(prefix))
       .then((rows) => {
-        cache.set(prefix, { at: Date.now(), rows });
+        // Do not cache an empty result — a cold blob store returning nothing
+        // should not block the next caller from trying again immediately.
+        if (rows.length > 0) {
+          cache.set(prefix, { at: Date.now(), rows });
+        }
         return rows as unknown[];
       })
       .finally(() => inFlight.delete(prefix));

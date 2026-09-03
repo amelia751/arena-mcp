@@ -86,7 +86,19 @@ export function Gallery() {
     };
   }, []);
 
-  if (!games || games.length === 0) {
+  if (games === null) {
+    return (
+      <section className="gallery">
+        <ul className="card-grid">
+          <li>
+            <BlankCard />
+          </li>
+        </ul>
+      </section>
+    );
+  }
+
+  if (games.length === 0) {
     return (
       <section className="gallery">
         <p className="blank-line">Nothing here yet.</p>

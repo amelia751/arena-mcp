@@ -35,9 +35,14 @@ function reconcile(db: DB): DB {
 }
 
 const BLOB_KEY = "db.json";
+type WriteGuard = { onlyIfMatch?: string; onlyIfNew?: boolean };
 type BlobStore = {
   get: (key: string) => Promise<string | null>;
-  setJSON: (key: string, value: unknown) => Promise<unknown>;
+  getWithMetadata: (
+    key: string,
+    options?: { type: "text" },
+  ) => Promise<{ data: string | null; etag?: string } | null>;
+  setJSON: (key: string, value: unknown, guard?: WriteGuard) => Promise<{ modified?: boolean }>;
 };
 let blobStore: BlobStore | null = null;
 
@@ -64,24 +69,48 @@ function complain(err: unknown) {
   console.error(`arena store read failed: ${err instanceof Error ? err.message : String(err)}`);
 }
 
-/** Null means the store did not answer, which is different from an empty store. */
-async function readBlob(): Promise<DB | null> {
+/**
+ * The version tag comes back with the data so a write can prove it is building
+ * on the copy it read. Null means the store did not answer, which is a
+ * different thing from an empty store.
+ */
+async function readBlob(): Promise<{ db: DB; etag?: string } | null> {
   const store = await blobs();
   if (!store) return null;
   try {
-    const raw = await store.get(BLOB_KEY);
-    return reconcile(raw ? (JSON.parse(raw) as DB) : empty());
+    const row = await store.getWithMetadata(BLOB_KEY, { type: "text" });
+    const raw = row?.data ?? null;
+    return { db: reconcile(raw ? (JSON.parse(raw) as DB) : empty()), etag: row?.etag };
   } catch (err) {
     complain(err);
     return null;
   }
 }
 
+// Two open tabs poll this every couple of seconds and every poll used to be its
+// own round trip. Holding the answer for a moment, and sharing one trip between
+// callers who arrive together, is the difference between a busy store and a
+// failing one.
+const READ_TTL = 750;
+let memAt = 0;
+let inFlight: Promise<{ db: DB; etag?: string } | null> | null = null;
+
+function freshRead() {
+  if (!inFlight) {
+    inFlight = readBlob().finally(() => {
+      inFlight = null;
+    });
+  }
+  return inFlight;
+}
+
 async function load(): Promise<DB> {
   if (SERVERLESS) {
-    const fresh = await readBlob();
-    if (fresh) {
-      mem = fresh;
+    if (mem && Date.now() - memAt < READ_TTL) return mem;
+    const snap = await freshRead();
+    if (snap) {
+      mem = snap.db;
+      memAt = Date.now();
       return mem;
     }
     // Showing a slightly old page beats showing an error page.
@@ -108,15 +137,6 @@ async function load(): Promise<DB> {
 }
 
 async function persist(db: DB) {
-  if (SERVERLESS) {
-    const store = await blobs();
-    if (!store) throw new Error("the store is unreachable, so nothing was saved");
-    // A failed write that reports success is how a move disappears between two
-    // screens. Let it reach the caller, who can say so.
-    await store.setJSON(BLOB_KEY, db);
-    mem = db;
-    return;
-  }
   mem = db;
   try {
     await mkdir(path.dirname(FILE), { recursive: true });
@@ -129,30 +149,59 @@ async function persist(db: DB) {
   }
 }
 
+const UNREACHABLE = "the store is unreachable, so nothing was saved";
+const BUSY = "the store is busy, so nothing was saved";
+
+function pause(attempt: number) {
+  // Spread the retries out so two writers racing do not collide again in step.
+  const spread = 40 * (attempt + 1);
+  return new Promise((r) => setTimeout(r, spread + Math.random() * spread));
+}
+
 /**
- * A write has to start from the copy that is really in the store.
+ * Save the edit only if nobody changed the store since we read it.
  *
- * A warm instance keeps the last database it read. Editing that snapshot after a
- * failed read and saving it puts an old world back on top of the real one, which
- * erases every game written in between. Losing one write is recoverable; erasing
- * the store is not. So a write that cannot read first does not happen.
+ * Everything lives in one document, so a plain save writes the whole world back.
+ * The page, the agent's tools and the bot all write at once, and without this
+ * the last one to finish quietly erases whatever the others just did — a move
+ * lands, then vanishes. The version tag turns that into a refusal we can retry.
  */
-async function loadForWrite(): Promise<DB> {
-  if (!SERVERLESS) return load();
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const fresh = await readBlob();
-    if (fresh) {
-      mem = fresh;
-      return fresh;
+async function saveIfUnchanged(db: DB, etag?: string): Promise<boolean> {
+  const store = await blobs();
+  if (!store) throw new Error(UNREACHABLE);
+  const guard: WriteGuard = etag ? { onlyIfMatch: etag } : { onlyIfNew: true };
+  const done = await store.setJSON(BLOB_KEY, db, guard);
+  return done?.modified !== false;
+}
+
+/**
+ * Read, apply the edit, and save — redoing the whole thing if somebody got there
+ * first. Re-running the edit against the newer copy is what keeps both changes.
+ */
+async function apply<T>(fn: (db: DB) => T): Promise<T> {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const snap = await readBlob();
+    // A write built on a copy we could not read would put an old world back on
+    // top of the real one. Losing one write is recoverable; that is not.
+    if (!snap) {
+      await pause(attempt);
+      continue;
     }
-    if (attempt < 2) await new Promise((r) => setTimeout(r, 60 * (attempt + 1)));
+    const result = fn(snap.db);
+    if (await saveIfUnchanged(snap.db, snap.etag)) {
+      mem = snap.db;
+      memAt = Date.now();
+      return result;
+    }
+    await pause(attempt);
   }
-  throw new Error("the store is unreachable, so nothing was saved");
+  throw new Error(BUSY);
 }
 
 function mutate<T>(fn: (db: DB) => T): Promise<T> {
   const run = writeChain.then(async () => {
-    const db = await loadForWrite();
+    if (SERVERLESS) return apply(fn);
+    const db = await load();
     const result = fn(db);
     await persist(db);
     return result;

@@ -65,11 +65,19 @@ export function Gallery() {
       setGames(next);
       setDealt(live);
     };
-    const tick = setInterval(() => void draw(), 2000);
+    // A shelf nobody is looking at does not need asking every two seconds, and
+    // a tab left open all day is load the store has to answer for no reason.
+    let tick: ReturnType<typeof setInterval>;
+    const arm = () => {
+      clearInterval(tick);
+      tick = setInterval(() => void draw(), document.hidden ? 15000 : 2000);
+    };
     const onVis = () => {
-      if (document.visibilityState === "visible") void draw();
+      if (!document.hidden) void draw();
+      arm();
     };
     void draw();
+    arm();
     document.addEventListener("visibilitychange", onVis);
     return () => {
       stale = true;

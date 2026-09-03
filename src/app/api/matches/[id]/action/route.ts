@@ -1,5 +1,5 @@
 import { takeAction } from "@/lib/match-service";
-import { fromResult, readBody } from "@/lib/http";
+import { fromWrite, readBody } from "@/lib/http";
 
 export async function POST(
   req: Request,
@@ -15,5 +15,5 @@ export async function POST(
     interface?: "human_ui" | "webmcp" | "bot";
     latency_ms?: number;
   }>(req);
-  return fromResult(await takeAction({ match_id: id, ...body }));
+  return fromWrite(() => takeAction({ match_id: id, ...body }));
 }

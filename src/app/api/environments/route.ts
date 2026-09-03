@@ -1,5 +1,5 @@
 import { createEnv, listEnvs } from "@/lib/env-service";
-import { fromResult, json, readBody } from "@/lib/http";
+import { fromWrite, json, readBody } from "@/lib/http";
 
 export async function GET() {
   return json(await listEnvs());
@@ -18,5 +18,5 @@ export async function POST(req: Request) {
       render?: string;
     };
   }>(req);
-  return fromResult(await createEnv(body));
+  return fromWrite(() => createEnv(body));
 }

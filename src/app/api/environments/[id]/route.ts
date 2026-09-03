@@ -1,5 +1,5 @@
 import { getEnv, updateEnv } from "@/lib/env-service";
-import { fromResult, readBody } from "@/lib/http";
+import { fromResult, fromWrite, readBody } from "@/lib/http";
 import type { EnvCode } from "@/lib/types";
 
 export async function GET(
@@ -22,8 +22,8 @@ export async function PATCH(
     description?: string;
     code?: Partial<EnvCode>;
   }>(req);
-  return fromResult(
-    await updateEnv({
+  return fromWrite(() =>
+    updateEnv({
       id,
       expected_revision: body.expected_revision,
       name: body.name,

@@ -43,7 +43,9 @@ async function blobs(): Promise<BlobStore | null> {
   if (blobStore) return blobStore;
   try {
     const { getStore } = await import("@netlify/blobs");
-    blobStore = getStore({ name: "arena", consistency: "strong" }) as BlobStore;
+    // Its own store. The recorder rewrites its whole log on every entry, and it
+    // must never be the reason a game fails to save.
+    blobStore = getStore({ name: "arena-trace", consistency: "strong" }) as BlobStore;
     return blobStore;
   } catch {
     return null;

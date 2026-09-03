@@ -17,6 +17,7 @@ export async function POST(req: Request) {
     return json(await startMatch(body));
   } catch (e) {
     const err = e as Error & { status?: number };
-    return json({ error: err.message }, err.status ?? 400);
+    const store = /store is unreachable|nothing was saved/.test(err.message);
+    return json({ error: err.message }, err.status ?? (store ? 503 : 400));
   }
 }

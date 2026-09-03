@@ -54,18 +54,37 @@ async function blobs(): Promise<BlobStore | null> {
   }
 }
 
+let lastComplaint = 0;
+
+/** Says why a read failed without touching the store that is already failing. */
+function complain(err: unknown) {
+  const now = Date.now();
+  if (now - lastComplaint < 30_000) return;
+  lastComplaint = now;
+  console.error(`arena store read failed: ${err instanceof Error ? err.message : String(err)}`);
+}
+
+/** Null means the store did not answer, which is different from an empty store. */
+async function readBlob(): Promise<DB | null> {
+  const store = await blobs();
+  if (!store) return null;
+  try {
+    const raw = await store.get(BLOB_KEY);
+    return reconcile(raw ? (JSON.parse(raw) as DB) : empty());
+  } catch (err) {
+    complain(err);
+    return null;
+  }
+}
+
 async function load(): Promise<DB> {
   if (SERVERLESS) {
-    const store = await blobs();
-    if (store) {
-      try {
-        const raw = await store.get(BLOB_KEY);
-        mem = reconcile(raw ? (JSON.parse(raw) as DB) : empty());
-        return mem;
-      } catch {
-        // A blob read failure should not take the page down.
-      }
+    const fresh = await readBlob();
+    if (fresh) {
+      mem = fresh;
+      return mem;
     }
+    // Showing a slightly old page beats showing an error page.
     if (!mem) mem = empty();
     return mem;
   }
@@ -89,18 +108,16 @@ async function load(): Promise<DB> {
 }
 
 async function persist(db: DB) {
-  mem = db;
   if (SERVERLESS) {
     const store = await blobs();
-    if (store) {
-      try {
-        await store.setJSON(BLOB_KEY, db);
-      } catch {
-        // Falls back to process memory for the life of this instance.
-      }
-    }
+    if (!store) throw new Error("the store is unreachable, so nothing was saved");
+    // A failed write that reports success is how a move disappears between two
+    // screens. Let it reach the caller, who can say so.
+    await store.setJSON(BLOB_KEY, db);
+    mem = db;
     return;
   }
+  mem = db;
   try {
     await mkdir(path.dirname(FILE), { recursive: true });
     const tmp = FILE + ".tmp";
@@ -112,9 +129,30 @@ async function persist(db: DB) {
   }
 }
 
+/**
+ * A write has to start from the copy that is really in the store.
+ *
+ * A warm instance keeps the last database it read. Editing that snapshot after a
+ * failed read and saving it puts an old world back on top of the real one, which
+ * erases every game written in between. Losing one write is recoverable; erasing
+ * the store is not. So a write that cannot read first does not happen.
+ */
+async function loadForWrite(): Promise<DB> {
+  if (!SERVERLESS) return load();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const fresh = await readBlob();
+    if (fresh) {
+      mem = fresh;
+      return fresh;
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 60 * (attempt + 1)));
+  }
+  throw new Error("the store is unreachable, so nothing was saved");
+}
+
 function mutate<T>(fn: (db: DB) => T): Promise<T> {
   const run = writeChain.then(async () => {
-    const db = await load();
+    const db = await loadForWrite();
     const result = fn(db);
     await persist(db);
     return result;

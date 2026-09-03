@@ -15,7 +15,8 @@
     "check:tools": "node scripts/smoke-tools.mjs",
     "check:answers": "node scripts/smoke-answers.mjs",
     "check:webmcp": "node scripts/probe-webmcp.mjs",
-    "agent": "node scripts/agent-live.mjs"
+    "agent": "node scripts/agent-live.mjs",
+    "check:store": "node --import ./scripts/register-loader.mjs scripts/smoke-store.mjs"
   },
   "dependencies": {
     "@jitl/quickjs-singlefile-cjs-release-sync": "^0.32.0",

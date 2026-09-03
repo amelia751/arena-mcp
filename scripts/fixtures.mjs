@@ -61,7 +61,7 @@ export const CONNECT_FOUR = {
     init: `function init(seed) {
   var board = [];
   for (var r = 0; r < 6; r++) { var row = []; for (var c = 0; c < 7; c++) row.push(null); board.push(row); }
-  return { board: board, to_move: 0, rng_cursor: seed };
+  return { board: board, to_move: 0, winner: null, rng_cursor: seed };
 }`,
     legal_actions: `function legal_actions(state, player) {
   if (player !== state.to_move) return [];
@@ -70,7 +70,7 @@ export const CONNECT_FOUR = {
   return out;
 }`,
     observe: `function observe(state, player) {
-  return { board: state.board, to_move: state.to_move, you_are: player };
+  return { board: state.board, to_move: state.to_move, winner: state.winner, you_are: player };
 }`,
     step: `function step(state, action) {
   if (typeof action !== "string" || action.indexOf("col_") !== 0) throw new Error("illegal action");
@@ -94,9 +94,15 @@ export const CONNECT_FOUR = {
   var won = win(row, c, 0, 1) || win(row, c, 1, 0) || win(row, c, 1, 1) || win(row, c, 1, -1);
   var full = true;
   for (var x = 0; x < 7; x++) if (b[0][x] === null) full = false;
-  var next = { board: b, to_move: 1 - state.to_move, rng_cursor: state.rng_cursor };
-  if (won) return { state: next, rewards: state.to_move === 0 ? [1, -1] : [-1, 1], terminal: true };
-  if (full) return { state: next, rewards: [0, 0], terminal: true };
+  var next = { board: b, to_move: 1 - state.to_move, winner: null, rng_cursor: state.rng_cursor };
+  if (won) {
+    next.winner = state.to_move;
+    return { state: next, rewards: state.to_move === 0 ? [1, -1] : [-1, 1], terminal: true };
+  }
+  if (full) {
+    next.winner = "draw";
+    return { state: next, rewards: [0, 0], terminal: true };
+  }
   return { state: next, rewards: [0, 0], terminal: false };
 }`,
     render: `function render(observation) {
@@ -110,8 +116,13 @@ export const CONNECT_FOUR = {
       html += "<span class='cell " + mark + "'></span>";
     }
   }
-  html += "</div><p class='who'>" + (observation.to_move === observation.you_are ? "your turn" : "waiting") + "</p></div>";
-  var css = ".c4{display:flex;flex-direction:column;align-items:center;gap:6px;width:max-content}.drops,.board{display:grid;grid-template-columns:repeat(7,40px);gap:5px}.drops{padding:0 14px}.drop{height:18px;border:0;background:transparent;position:relative}.drop:not(:disabled):after{content:'';position:absolute;left:50%;top:4px;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1c1814}.board{padding:14px;background:#1b4a38;border-radius:18px}.cell{width:40px;height:40px;border-radius:50%;background:#14392c;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}.cell.x{background:radial-gradient(circle at 32% 28%,#f3d37a,#d4a24a 62%,#a87a20);box-shadow:none}.cell.o{background:radial-gradient(circle at 32% 28%,#fffaf0,#efe6d4 60%,#c9bea6);box-shadow:none}.who{margin:2px 0 0;color:#6e675c;font-size:14px}";
+  var w = observation.winner;
+  var said = w === null || w === undefined
+    ? (observation.to_move === observation.you_are ? "your turn" : "waiting")
+    : w === "draw" ? "a draw"
+    : w === observation.you_are ? "you win" : "you lose";
+  html += "</div><p class='who'>" + said + "</p></div>";
+  var css = ".c4{display:flex;flex-direction:column;align-items:center;gap:6px;width:max-content}.drops,.board{display:grid;grid-template-columns:repeat(7,40px);gap:5px}.drops{padding:0 14px}.drop{height:36px;border:0;background:transparent;position:relative}.drop:not(:disabled):after{content:'';position:absolute;left:50%;top:13px;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1c1814}.board{padding:14px;background:#1b4a38;border-radius:18px}.cell{width:40px;height:40px;border-radius:50%;background:#14392c;box-shadow:inset 0 2px 4px rgba(0,0,0,.35)}.cell.x{background:radial-gradient(circle at 32% 28%,#f3d37a,#d4a24a 62%,#a87a20);box-shadow:none}.cell.o{background:radial-gradient(circle at 32% 28%,#fffaf0,#efe6d4 60%,#c9bea6);box-shadow:none}.who{margin:2px 0 0;color:#6e675c;font-size:14px}";
   return { html: html, css: css };
 }`,
   },

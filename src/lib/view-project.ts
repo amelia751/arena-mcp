@@ -375,6 +375,15 @@ export function project(options?: ProjectOptions): Projection {
   if (!controls.length) {
     problems.push('nothing painted a data-action. Put data-action="<legal id>" on clickable elements.');
   }
+  // Nothing else in this pass ever looks at how big a control is, so a table can
+  // be perfectly correct and still be a row of slivers nobody can hit.
+  const small = controls.filter((c) => c.enabled && c.h > 0 && c.h < 32);
+  if (small.length) {
+    const worst = small.reduce((a, b) => (a.h < b.h ? a : b));
+    const line = `${small.length === 1 ? `${worst.action} is` : `${small.length} controls are`} under 32px tall (${worst.action} is ${worst.h}px) — give them height or padding so a person can hit them`;
+    if (worst.h < 24) problems.push(line);
+    else notes.push(line);
+  }
   if (blanks.length) {
     // Colour can stand in for a label — but only while the controls differ.
     const alike: Record<string, Node[]> = {};

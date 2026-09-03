@@ -153,6 +153,27 @@ for (const [what, args, expected] of [
     },
     null,
   ],
+  [
+    // Correct, readable, and still a row of slivers nobody can reliably hit.
+    "controls too thin to aim at",
+    {
+      html: `<div class="row">${[0, 1, 2]
+        .map((i) => `<button data-action="col_${i}">Col ${i + 1}</button>`)
+        .join("")}</div>`,
+      css: `.row{display:flex;gap:6px}button{width:70px;height:16px;background:#ddd;color:#111}`,
+    },
+    /under 32px tall/,
+  ],
+  [
+    "the same controls given room",
+    {
+      html: `<div class="row">${[0, 1, 2]
+        .map((i) => `<button data-action="col_${i}">Col ${i + 1}</button>`)
+        .join("")}</div>`,
+      css: `.row{display:flex;gap:6px}button{width:70px;height:36px;background:#ddd;color:#111}`,
+    },
+    null,
+  ],
 ]) {
   const out = await call("preview_view", args);
   const flagged = expected ? expected.test(out) : /^ok: true/.test(out);

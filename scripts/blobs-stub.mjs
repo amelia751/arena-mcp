@@ -1,26 +1,26 @@
 /**
- * A blob store the test can break on purpose.
- *
- * It keeps a version tag per key and honours conditional writes, so a test can
- * slip a competing write in between a read and a save and watch what happens.
+ * A blob store the test can break on purpose, and one that races the way the
+ * real one does: a write claiming an out-of-date version tag is *not* reliably
+ * refused. That is the behaviour the app has to survive.
  */
 const keys = new Map();
-let version = 0;
 
 export const control = {
   failReads: false,
   failWrites: false,
   reads: 0,
   writes: 0,
-  refused: 0,
   /** Runs once after the next read, standing in for another instance writing. */
   afterNextRead: null,
   seed(key, value) {
-    keys.set(key, { body: JSON.stringify(value), etag: `v${++version}` });
+    keys.set(key, JSON.stringify(value));
   },
   raw(key) {
-    const row = keys.get(key);
-    return row ? JSON.parse(row.body) : null;
+    const v = keys.get(key);
+    return v ? JSON.parse(v) : null;
+  },
+  has(prefix) {
+    return [...keys.keys()].filter((k) => k.startsWith(prefix)).sort();
   },
   reset() {
     keys.clear();
@@ -28,7 +28,6 @@ export const control = {
     this.failWrites = false;
     this.reads = 0;
     this.writes = 0;
-    this.refused = 0;
     this.afterNextRead = null;
   },
 };
@@ -38,33 +37,30 @@ export function getStore() {
     async get(key) {
       control.reads += 1;
       if (control.failReads) throw new Error("simulated blob outage");
-      return keys.get(key)?.body ?? null;
-    },
-    async getWithMetadata(key) {
-      control.reads += 1;
-      if (control.failReads) throw new Error("simulated blob outage");
-      const row = keys.get(key);
+      const body = keys.get(key) ?? null;
       const hook = control.afterNextRead;
       if (hook) {
         control.afterNextRead = null;
         await hook();
       }
-      return row ? { data: row.body, etag: row.etag } : null;
+      return body;
     },
-    async setJSON(key, value, guard = {}) {
+    async setJSON(key, value) {
       if (control.failWrites) throw new Error("simulated blob outage");
-      const row = keys.get(key);
-      if (guard.onlyIfNew && row) {
-        control.refused += 1;
-        return { modified: false };
-      }
-      if (guard.onlyIfMatch && row?.etag !== guard.onlyIfMatch) {
-        control.refused += 1;
-        return { modified: false };
-      }
       control.writes += 1;
-      keys.set(key, { body: JSON.stringify(value), etag: `v${++version}` });
-      return { modified: true };
+      keys.set(key, JSON.stringify(value));
+    },
+    async delete(key) {
+      keys.delete(key);
+    },
+    async list({ prefix }) {
+      control.reads += 1;
+      if (control.failReads) throw new Error("simulated blob outage");
+      return {
+        blobs: [...keys.keys()]
+          .filter((k) => k.startsWith(prefix))
+          .map((key) => ({ key })),
+      };
     },
   };
 }

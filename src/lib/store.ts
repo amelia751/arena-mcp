@@ -17,10 +17,6 @@ const SERVERLESS = !!(
   process.env.LAMBDA_TASK_ROOT
 );
 
-let mem: DB | null = null;
-let memMtime = 0;
-let writeChain: Promise<void> = Promise.resolve();
-
 /** Nothing ships with the page. Every game here was written by somebody. */
 function empty(): DB {
   return { environments: {}, matches: {}, steps: {} };
@@ -34,15 +30,30 @@ function reconcile(db: DB): DB {
   return db;
 }
 
-const BLOB_KEY = "db.json";
-type WriteGuard = { onlyIfMatch?: string; onlyIfNew?: boolean };
+const newestFirst = (a: { created_at: string }, b: { created_at: string }) =>
+  a.created_at < b.created_at ? 1 : -1;
+
+/*
+ * Each game, match and tape lives under its own key.
+ *
+ * They all used to share one document, which meant every save rewrote the whole
+ * world. Two saves that overlapped — a move landing while the agent published,
+ * say — would each write a copy of everything they had read, and whichever
+ * finished last erased the other. The host offers a version check to guard
+ * against that, but it does not hold under load: eight writers claiming the same
+ * version were all told they had won. Separate keys sidestep the argument. Two
+ * things that have nothing to do with each other no longer share a page.
+ */
+const ENV = "env/";
+const MATCH = "match/";
+const STEPS = "steps/";
+const LEGACY = "db.json";
+
 type BlobStore = {
-  get: (key: string) => Promise<string | null>;
-  getWithMetadata: (
-    key: string,
-    options?: { type: "text" },
-  ) => Promise<{ data: string | null; etag?: string } | null>;
-  setJSON: (key: string, value: unknown, guard?: WriteGuard) => Promise<{ modified?: boolean }>;
+  get: (key: string, options?: { type: "text" }) => Promise<string | null>;
+  setJSON: (key: string, value: unknown) => Promise<unknown>;
+  delete: (key: string) => Promise<void>;
+  list: (options: { prefix: string }) => Promise<{ blobs: { key: string }[] }>;
 };
 let blobStore: BlobStore | null = null;
 
@@ -51,7 +62,7 @@ async function blobs(): Promise<BlobStore | null> {
   if (blobStore) return blobStore;
   try {
     const { getStore } = await import("@netlify/blobs");
-    blobStore = getStore({ name: "arena", consistency: "strong" }) as BlobStore;
+    blobStore = getStore({ name: "arena", consistency: "strong" }) as unknown as BlobStore;
     return blobStore;
   } catch {
     // Do not cache a failed init — the next request may have the context.
@@ -59,6 +70,7 @@ async function blobs(): Promise<BlobStore | null> {
   }
 }
 
+const UNREACHABLE = "the store is unreachable, so nothing was saved";
 let lastComplaint = 0;
 
 /** Says why a read failed without touching the store that is already failing. */
@@ -66,57 +78,104 @@ function complain(err: unknown) {
   const now = Date.now();
   if (now - lastComplaint < 30_000) return;
   lastComplaint = now;
-  console.error(`arena store read failed: ${err instanceof Error ? err.message : String(err)}`);
+  console.error(`arena store: ${err instanceof Error ? err.message : String(err)}`);
 }
 
-/**
- * The version tag comes back with the data so a write can prove it is building
- * on the copy it read. Null means the store did not answer, which is a
- * different thing from an empty store.
- */
-async function readBlob(): Promise<{ db: DB; etag?: string } | null> {
+async function readKey<T>(key: string): Promise<T | null> {
   const store = await blobs();
   if (!store) return null;
   try {
-    const row = await store.getWithMetadata(BLOB_KEY, { type: "text" });
-    const raw = row?.data ?? null;
-    return { db: reconcile(raw ? (JSON.parse(raw) as DB) : empty()), etag: row?.etag };
+    const raw = await store.get(key, { type: "text" });
+    return raw ? (JSON.parse(raw) as T) : null;
   } catch (err) {
     complain(err);
     return null;
   }
 }
 
-// Two open tabs poll this every couple of seconds and every poll used to be its
-// own round trip. Holding the answer for a moment, and sharing one trip between
-// callers who arrive together, is the difference between a busy store and a
-// failing one.
-const READ_TTL = 750;
-let memAt = 0;
-let inFlight: Promise<{ db: DB; etag?: string } | null> | null = null;
-
-function freshRead() {
-  if (!inFlight) {
-    inFlight = readBlob().finally(() => {
-      inFlight = null;
-    });
-  }
-  return inFlight;
+/** A save that never landed must not report success. */
+async function writeKey(key: string, value: unknown): Promise<void> {
+  const store = await blobs();
+  if (!store) throw new Error(UNREACHABLE);
+  await store.setJSON(key, value);
 }
 
-async function load(): Promise<DB> {
-  if (SERVERLESS) {
-    if (mem && Date.now() - memAt < READ_TTL) return mem;
-    const snap = await freshRead();
-    if (snap) {
-      mem = snap.db;
-      memAt = Date.now();
-      return mem;
-    }
-    // Showing a slightly old page beats showing an error page.
-    if (!mem) mem = empty();
-    return mem;
+async function readAll<T>(prefix: string): Promise<T[]> {
+  const store = await blobs();
+  if (!store) return [];
+  try {
+    const { blobs: found } = await store.list({ prefix });
+    const rows: (T | null)[] = await Promise.all(found.map((b) => readKey<T>(b.key)));
+    return rows.filter((row): row is T => row !== null);
+  } catch (err) {
+    complain(err);
+    return [];
   }
+}
+
+/*
+ * Everything written before the split still lives in one document. Move it
+ * across the first time somebody asks, so nobody loses a game to an upgrade.
+ */
+let migration: Promise<void> | null = null;
+
+function migrate(): Promise<void> {
+  migration ??= (async () => {
+    const old = await readKey<DB>(LEGACY);
+    if (!old) return;
+    const db = reconcile(old);
+    await Promise.all([
+      ...Object.values(db.environments).map((e) => writeKey(ENV + e.id, e)),
+      ...Object.values(db.matches).map((m) => writeKey(MATCH + m.id, m)),
+      ...Object.entries(db.steps).map(([id, tape]) => writeKey(STEPS + id, tape)),
+    ]);
+    const store = await blobs();
+    await store?.delete(LEGACY);
+  })().catch((err) => {
+    complain(err);
+    migration = null;
+  });
+  return migration;
+}
+
+/*
+ * Two open tabs poll this every couple of seconds. Holding the answer for a
+ * moment, and sharing one trip between callers who arrive together, is the
+ * difference between a busy store and a failing one.
+ */
+const READ_TTL = 750;
+const cache = new Map<string, { at: number; rows: unknown[] }>();
+const inFlight = new Map<string, Promise<unknown[]>>();
+
+async function listCached<T>(prefix: string): Promise<T[]> {
+  const hit = cache.get(prefix);
+  if (hit && Date.now() - hit.at < READ_TTL) return hit.rows as T[];
+
+  let pending = inFlight.get(prefix);
+  if (!pending) {
+    pending = migrate()
+      .then(() => readAll<T>(prefix))
+      .then((rows) => {
+        cache.set(prefix, { at: Date.now(), rows });
+        return rows as unknown[];
+      })
+      .finally(() => inFlight.delete(prefix));
+    inFlight.set(prefix, pending);
+  }
+  return (await pending) as T[];
+}
+
+function forget(prefix: string) {
+  cache.delete(prefix);
+}
+
+// ── The local file, for a single process on somebody's laptop ────────────────
+
+let mem: DB | null = null;
+let memMtime = 0;
+let writeChain: Promise<void> = Promise.resolve();
+
+async function loadFile(): Promise<DB> {
   let mtime = 0;
   try {
     mtime = (await stat(/*turbopackIgnore: true*/ FILE)).mtimeMs;
@@ -131,12 +190,12 @@ async function load(): Promise<DB> {
     return mem;
   } catch {
     mem = empty();
-    await persist(mem);
+    await persistFile(mem);
     return mem;
   }
 }
 
-async function persist(db: DB) {
+async function persistFile(db: DB) {
   mem = db;
   try {
     await mkdir(path.dirname(FILE), { recursive: true });
@@ -149,61 +208,11 @@ async function persist(db: DB) {
   }
 }
 
-const UNREACHABLE = "the store is unreachable, so nothing was saved";
-const BUSY = "the store is busy, so nothing was saved";
-
-function pause(attempt: number) {
-  // Spread the retries out so two writers racing do not collide again in step.
-  const spread = 40 * (attempt + 1);
-  return new Promise((r) => setTimeout(r, spread + Math.random() * spread));
-}
-
-/**
- * Save the edit only if nobody changed the store since we read it.
- *
- * Everything lives in one document, so a plain save writes the whole world back.
- * The page, the agent's tools and the bot all write at once, and without this
- * the last one to finish quietly erases whatever the others just did — a move
- * lands, then vanishes. The version tag turns that into a refusal we can retry.
- */
-async function saveIfUnchanged(db: DB, etag?: string): Promise<boolean> {
-  const store = await blobs();
-  if (!store) throw new Error(UNREACHABLE);
-  const guard: WriteGuard = etag ? { onlyIfMatch: etag } : { onlyIfNew: true };
-  const done = await store.setJSON(BLOB_KEY, db, guard);
-  return done?.modified !== false;
-}
-
-/**
- * Read, apply the edit, and save — redoing the whole thing if somebody got there
- * first. Re-running the edit against the newer copy is what keeps both changes.
- */
-async function apply<T>(fn: (db: DB) => T): Promise<T> {
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const snap = await readBlob();
-    // A write built on a copy we could not read would put an old world back on
-    // top of the real one. Losing one write is recoverable; that is not.
-    if (!snap) {
-      await pause(attempt);
-      continue;
-    }
-    const result = fn(snap.db);
-    if (await saveIfUnchanged(snap.db, snap.etag)) {
-      mem = snap.db;
-      memAt = Date.now();
-      return result;
-    }
-    await pause(attempt);
-  }
-  throw new Error(BUSY);
-}
-
-function mutate<T>(fn: (db: DB) => T): Promise<T> {
+function editFile<T>(fn: (db: DB) => T): Promise<T> {
   const run = writeChain.then(async () => {
-    if (SERVERLESS) return apply(fn);
-    const db = await load();
+    const db = await loadFile();
     const result = fn(db);
-    await persist(db);
+    await persistFile(db);
     return result;
   });
   writeChain = run.then(
@@ -213,39 +222,105 @@ function mutate<T>(fn: (db: DB) => T): Promise<T> {
   return run;
 }
 
+// ── What the rest of the app uses ────────────────────────────────────────────
+
 export async function listEnvironments(): Promise<Environment[]> {
-  const db = await load();
-  return Object.values(db.environments).sort((a, b) =>
-    a.created_at < b.created_at ? 1 : -1,
-  );
+  if (SERVERLESS) {
+    const rows = await listCached<Environment>(ENV);
+    for (const row of rows) row.kind = "authored";
+    return [...rows].sort(newestFirst);
+  }
+  const db = await loadFile();
+  return Object.values(db.environments).sort(newestFirst);
 }
 
 export async function getEnvironment(id: string): Promise<Environment | null> {
-  const db = await load();
+  if (SERVERLESS) {
+    await migrate();
+    const row = await readKey<Environment>(ENV + id);
+    if (row) row.kind = "authored";
+    return row;
+  }
+  const db = await loadFile();
   return db.environments[id] ?? null;
 }
 
 export async function putEnvironment(env: Environment): Promise<Environment> {
-  return mutate((db) => {
+  if (SERVERLESS) {
+    await migrate();
+    await writeKey(ENV + env.id, env);
+    forget(ENV);
+    return env;
+  }
+  return editFile((db) => {
     db.environments[env.id] = env;
     return env;
   });
 }
 
 export async function getMatch(id: string): Promise<Match | null> {
-  const db = await load();
+  if (SERVERLESS) {
+    await migrate();
+    return readKey<Match>(MATCH + id);
+  }
+  const db = await loadFile();
   return db.matches[id] ?? null;
 }
 
 export async function putMatch(match: Match): Promise<Match> {
-  return mutate((db) => {
+  if (SERVERLESS) {
+    await migrate();
+    await writeKey(MATCH + match.id, match);
+    forget(MATCH);
+    return match;
+  }
+  return editFile((db) => {
     db.matches[match.id] = match;
     return match;
   });
 }
 
+export async function listMatches(environmentId?: string): Promise<Match[]> {
+  if (SERVERLESS) {
+    const rows = await listCached<Match>(MATCH);
+    return rows
+      .filter((m) => !environmentId || m.environment_id === environmentId)
+      .sort(newestFirst);
+  }
+  const db = await loadFile();
+  return Object.values(db.matches)
+    .filter((m) => !environmentId || m.environment_id === environmentId)
+    .sort(newestFirst);
+}
+
+export async function listSteps(matchId: string): Promise<StepRecord[]> {
+  if (SERVERLESS) {
+    await migrate();
+    return (await readKey<StepRecord[]>(STEPS + matchId)) ?? [];
+  }
+  const db = await loadFile();
+  return db.steps[matchId] ?? [];
+}
+
+/*
+ * A tape only ever grows, and only from the match it belongs to, so the two
+ * seats taking turns are the only writers. Reading it back before adding to it
+ * keeps a move from landing on a copy that is missing the one before it.
+ */
+async function appendToTape(matchId: string, step: StepRecord): Promise<StepRecord> {
+  const key = STEPS + matchId;
+  const tape = (await readKey<StepRecord[]>(key)) ?? [];
+  tape.push(step);
+  await writeKey(key, tape);
+  return step;
+}
+
 export async function appendStep(step: StepRecord): Promise<StepRecord> {
-  return mutate((db) => {
+  if (SERVERLESS) {
+    await migrate();
+    return appendToTape(step.match_id, step);
+  }
+  return editFile((db) => {
     const list = db.steps[step.match_id] ?? [];
     list.push(step);
     db.steps[step.match_id] = list;
@@ -253,23 +328,20 @@ export async function appendStep(step: StepRecord): Promise<StepRecord> {
   });
 }
 
-export async function listSteps(matchId: string): Promise<StepRecord[]> {
-  const db = await load();
-  return db.steps[matchId] ?? [];
-}
-
-export async function listMatches(environmentId?: string): Promise<Match[]> {
-  const db = await load();
-  return Object.values(db.matches)
-    .filter((m) => !environmentId || m.environment_id === environmentId)
-    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-}
-
 export async function replaceMatchAndStep(
   match: Match,
   step: StepRecord,
 ): Promise<{ match: Match; step: StepRecord }> {
-  return mutate((db) => {
+  if (SERVERLESS) {
+    await migrate();
+    // The tape first: a move that is recorded but not yet reflected in the
+    // match reads as a slow save, where the reverse reads as a lost move.
+    await appendToTape(match.id, step);
+    await writeKey(MATCH + match.id, match);
+    forget(MATCH);
+    return { match, step };
+  }
+  return editFile((db) => {
     db.matches[match.id] = match;
     const list = db.steps[match.id] ?? [];
     list.push(step);

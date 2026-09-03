@@ -37,6 +37,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link className="wordmark" href="/">
               Arena
             </Link>
+            <Link className="nav-quiet" href="/problem">
+              Problem
+            </Link>
+            <Link className="nav-quiet" href="/solution">
+              Solution
+            </Link>
             <Link className="nav-quiet" href="/diagram">
               Diagram
             </Link>

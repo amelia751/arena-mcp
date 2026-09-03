@@ -1304,3 +1304,317 @@ h2 {
   line-height: 1.45;
   color: var(--muted);
 }
+
+/* slide pages — problem / solution */
+
+.sl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 52rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.sl .kicker {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.68rem;
+}
+
+.sl code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8em;
+}
+
+.sl-head {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem 1rem;
+  background: var(--paper);
+}
+
+.sl-head-good {
+  border-left-color: var(--good);
+}
+
+.sl-head h2 {
+  margin: 0.3rem 0 0;
+  max-width: 46rem;
+  font-family: var(--font-cheltenham), Georgia, serif;
+  font-size: 1.3rem;
+  line-height: 1.28;
+  font-weight: 600;
+}
+
+.sl-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.65rem;
+}
+
+.sl-traits span {
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: #f3e2e5;
+  color: #8c1a2b;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.sl-traits-good span {
+  background: #dcefe0;
+  color: #14603a;
+}
+
+.sl-lead {
+  max-width: 46rem;
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.sl-versus {
+  display: grid;
+  grid-template-columns: 1fr 13rem 1fr;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.sl-card {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem 0.85rem;
+}
+
+.sl-human {
+  background: #a0c35a;
+}
+
+.sl-agent {
+  background: #b0c4ef;
+}
+
+.sl-card header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sl-want {
+  margin: 0.15rem 0 0.55rem;
+  font-family: var(--font-cheltenham), Georgia, serif;
+  font-size: 1.02rem;
+}
+
+.sl-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.sl-card li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.78rem;
+}
+
+.sl-card li b {
+  font-weight: 700;
+}
+
+.sl-tag {
+  margin: 0.6rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #33402a;
+}
+
+.sl-agent .sl-tag {
+  color: #26364f;
+}
+
+.sl-join {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  text-align: center;
+  border-radius: 12px;
+  padding: 0.6rem;
+}
+
+.sl-join .dg-ico {
+  width: 2rem;
+  height: 2rem;
+  stroke-width: 1.5;
+}
+
+.sl-join span {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.sl-join-bad {
+  background: #f8d4d8;
+  color: var(--accent);
+}
+
+.sl-join-good {
+  background: #f4e8f6;
+  color: #6b2f7a;
+}
+
+.sl-clients {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.1rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(107, 47, 122, 0.25);
+  color: var(--ink);
+}
+
+.sl-clients .dg-brand {
+  font-size: 0.72rem;
+}
+
+.sl-cost {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  background: #2a2a2a;
+  color: #f4f4f2;
+  font-size: 0.82rem;
+}
+
+.sl-cost span {
+  color: #c9c9c5;
+  font-size: 0.78rem;
+}
+
+.sl-cost em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 700;
+  color: #ff8fa0;
+  white-space: nowrap;
+}
+
+.sl-attempts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.sl-attempt {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem 0.7rem;
+  background: var(--paper);
+}
+
+.sl-attempt header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.sl-gives {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.sl-missing {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #8c1a2b;
+}
+
+.sl-missing .dg-ico {
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-top: 0.12rem;
+}
+
+.sl-down {
+  text-align: center;
+  font-size: 1.1rem;
+  line-height: 0.6;
+  color: var(--accent);
+  margin: -0.1rem 0;
+}
+
+.sl-match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+  border-radius: 12px;
+  padding: 0.65rem 0.9rem;
+  background: #ba81c5;
+}
+
+.sl-match span {
+  font-size: 0.78rem;
+}
+
+.sl-out {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.4rem;
+  border-radius: 12px;
+  padding: 0.65rem 0.9rem;
+  background: #7ec8c3;
+}
+
+.sl-out .kicker {
+  line-height: 1.35;
+}
+
+.sl-schema {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.sl-schema code {
+  font-weight: 700;
+}
+
+.sl-outside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+}
+
+.sl-outside > span {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #14403d;
+}

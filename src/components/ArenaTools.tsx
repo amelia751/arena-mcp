@@ -220,6 +220,17 @@ export function ArenaTools() {
     const deskMatch = () => currentDesk()?.match() ?? null;
 
     /**
+     * When the agent was last handed a position. take_action reports the gap, so
+     * latency_ms on a row means the same thing whoever moved — how long the
+     * player took to decide — instead of how long the sandbox took to run.
+     */
+    let handed = 0;
+    const handOver = () => {
+      handed = Date.now();
+    };
+    const decided = () => (handed ? Date.now() - handed : undefined);
+
+    /**
      * The match on screen, or the one still running on the server when this page
      * has no table mounted — which is what happens the moment a browser reloads
      * or navigates between turns. Losing the match there used to end the game.
@@ -672,6 +683,7 @@ export function ArenaTools() {
             `/api/matches/${session.match_id}/observation?seat=${session.agent_seat}`,
           );
           const yourTurn = obs.to_move === session.agent_seat;
+          handOver();
           return `${clip(
             {
               match_id: session.match_id,
@@ -709,6 +721,7 @@ export function ArenaTools() {
           const q = s != null ? `?seat=${s}` : "";
           const res = await api(`/api/matches/${id}/observation${q}`, { signal });
           if (res.error) return clip(res);
+          handOver();
           return `${clip(
             {
               match_id: id,
@@ -772,6 +785,7 @@ export function ArenaTools() {
               ...rest,
               seat: session?.agent_seat,
               interface: "webmcp",
+              latency_ms: decided(),
             }),
             signal,
           });
@@ -784,6 +798,7 @@ export function ArenaTools() {
             rewards: m?.rewards,
             seat: session?.agent_seat,
           };
+          handOver();
           return `${clip(
             {
               ok: true,
@@ -835,6 +850,7 @@ export function ArenaTools() {
           }
           await currentDesk()?.refresh();
           const o = res.observation;
+          handOver();
           return `${clip(
             {
               status: "ready",

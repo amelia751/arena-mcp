@@ -321,6 +321,39 @@ async function main() {
     }
   }
 
+  /**
+   * Proof that the page keeps up on its own. Nothing here reloads or navigates
+   * during play, so every change these samples see arrived while the person sat
+   * still — which is the only kind of update that counts.
+   */
+  const stream = { samples: [], navigations: 0, started: Date.now() };
+  page.on("framenavigated", (f) => {
+    if (f === page.mainFrame() && stream.watching) stream.navigations++;
+  });
+  async function watchStream() {
+    stream.watching = true;
+    let last = "";
+    while (stream.watching) {
+      try {
+        const s = await page.evaluate(() => ({
+          rows: document.querySelectorAll(".tape tbody tr").length,
+          status: (document.querySelector(".desk-status")?.innerText || "")
+            .replace(/\s+/g, " ")
+            .trim(),
+          board: document.querySelectorAll(".game-host iframe").length,
+        }));
+        const key = `${s.rows}|${s.status}|${s.board}`;
+        if (key !== last) {
+          last = key;
+          stream.samples.push({ at: Date.now() - stream.started, ...s });
+        }
+      } catch {
+        /* the page is mid-update; the next sample catches it */
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+
   const shot = async (label) => {
     const file = path.join(OUT, `${RUN}-${label}.png`);
     await page.screenshot({ path: file, fullPage: false }).catch(() => {});
@@ -472,6 +505,7 @@ async function main() {
         seen.terminal = false;
         human.moves = 0;
         if (seen.matchId && !human.task) {
+          if (!stream.watching) void watchStream();
           human.task = humanLoop(seen.matchId, started?.human_seat ?? 0).catch((e) =>
             log({ event: "human_crash", message: e.message }),
           );
@@ -529,11 +563,14 @@ async function main() {
     }
   }
 
+  stream.watching = false;
   const finalShot = await shot("final");
   const summary = {
     ...seen,
     humanMoves: human.total,
     trajectoryRows: episodes?.rows ?? 0,
+    liveUpdates: stream.samples.length,
+    reloadsDuringPlay: stream.navigations,
     toolErrors: toolErrors.length,
     gatesFired: gates.length,
     pageErrors: pageEvents.length,
@@ -559,6 +596,14 @@ async function main() {
   if (pageEvents.length) {
     console.log("\n==== page errors ====");
     for (const e of pageEvents.slice(0, 15)) console.log(`${e.kind}: ${e.text.slice(0, 250)}`);
+  }
+  if (stream.samples.length) {
+    console.log(`\n==== what the page did on its own (${stream.navigations} reloads) ====`);
+    for (const s of stream.samples) {
+      console.log(
+        `  ${String(s.at).padStart(6)}ms  ${String(s.rows).padStart(2)} rows  board:${s.board}  ${s.status}`,
+      );
+    }
   }
   if (episodes?.jsonl) {
     console.log("\n==== trajectory head ====");

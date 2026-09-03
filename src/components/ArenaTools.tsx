@@ -12,6 +12,8 @@ import {
   registerRefresher,
   waitForDesk,
 } from "@/lib/session";
+import { beginAgentRun, endAgentRun } from "@/lib/agent-run";
+import { withHandOver } from "@/lib/hand-over";
 
 /**
  * What the browser hands execute(): an abort signal that fires if the call is
@@ -333,9 +335,8 @@ export function ArenaTools() {
       };
       // Handing control to the person is exactly what this is, so say so when
       // the browser offers a way to say it.
-      const ask = opts.run?.requestUserInteraction;
-      const res = await (typeof ask === "function" ? ask(loop) : loop());
-      return { res: res as Awaited<ReturnType<typeof loop>>, budget };
+      const res = await withHandOver(opts.run, loop);
+      return { res, budget };
     };
 
     /**
@@ -1076,6 +1077,11 @@ export function ArenaTools() {
             execute: async (input, run) => {
               const ctx = (run ?? {}) as ToolRun;
               if (ctx.signal?.aborted) return "cancelled before it ran.";
+              const playing =
+                tool.name === "start_match" ||
+                tool.name === "take_action" ||
+                tool.name === "wait_for_turn";
+              if (playing) beginAgentRun();
               const began = Date.now();
               let out: string;
               try {
@@ -1085,6 +1091,8 @@ export function ArenaTools() {
                   ctx.signal?.aborted || (e instanceof Error && e.name === "AbortError")
                     ? "cancelled."
                     : `error: ${e instanceof Error ? e.message : String(e)}`;
+              } finally {
+                if (playing) endAgentRun();
               }
               report({
                 event: "tool",

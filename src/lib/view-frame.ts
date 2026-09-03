@@ -56,8 +56,13 @@ window.addEventListener("message", (e) => {
   }
   if (d.kind === "legal") {
     const legal = d.legal || [];
+    // An empty legal list on an enabled board used to grey out every control,
+    // which is how a person ended up staring at "Your turn" with nothing to
+    // click. If we do not know the mask, leave the buttons up and let the
+    // server refuse a bad move.
+    const open = !d.disabled && legal.length === 0;
     for (const el of document.querySelectorAll("[data-action]")) {
-      const off = d.disabled || legal.indexOf(el.getAttribute("data-action")) < 0;
+      const off = !open && (d.disabled || legal.indexOf(el.getAttribute("data-action")) < 0);
       if (off) { el.setAttribute("disabled", ""); el.setAttribute("aria-disabled", "true"); }
       else { el.removeAttribute("disabled"); el.removeAttribute("aria-disabled"); }
     }

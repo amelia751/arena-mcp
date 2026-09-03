@@ -5,6 +5,7 @@ import { GameView } from "./GameView";
 import type { AuthoredView } from "@/lib/view";
 import { registerDesk, type SessionMatch } from "@/lib/session";
 import { playerName } from "@/lib/seats";
+import { agentIsRunning, subscribeAgentRun } from "@/lib/agent-run";
 
 const subscribeNothing = () => () => {};
 const hasModelContext = () =>
@@ -76,6 +77,7 @@ export function PlayDesk({
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   // An agent on the page takes the other seat; without one, the bot fills in.
   const agentPresent = useSyncExternalStore(subscribeNothing, hasModelContext, () => false);
+  const agentRunning = useSyncExternalStore(subscribeAgentRun, agentIsRunning, () => false);
   const opponent = chosenOpponent ?? (agentPresent ? "agent" : "bot");
   const presentedAt = useRef<number | null>(null);
   const matchRef = useRef<MatchInfo | null>(null);
@@ -285,17 +287,9 @@ export function PlayDesk({
   const yourTurn = !!match && !match.terminal && match.to_move === humanSeat;
   const theirTurn = !!match && !match.terminal && match.to_move !== humanSeat;
 
-  // An assistant only plays while it is answering. If it has finished its reply,
-  // nothing on this page can reach it, and saying "thinking" forever is a lie
-  // that leaves the person waiting on something that is never coming.
-  const [stalledAt, setStalledAt] = useState<number | null>(null);
-  const nowRevision = match?.revision ?? -1;
-  useEffect(() => {
-    if (!theirTurn || opponent !== "agent") return;
-    const t = setTimeout(() => setStalledAt(nowRevision), 30000);
-    return () => clearTimeout(t);
-  }, [theirTurn, opponent, nowRevision]);
-  const stalled = theirTurn && opponent === "agent" && stalledAt === nowRevision;
+  // Only a running play tool means the assistant is actually thinking. A quiet
+  // chat with the other seat still to move is just a board waiting on a nudge.
+  const stalled = theirTurn && opponent === "agent" && !agentRunning;
   const agentSeat = 1 - humanSeat;
   const them = opponent === "agent" ? "Agent" : "Bot";
   const score = match?.terminal ? match.rewards : null;
@@ -388,7 +382,7 @@ export function PlayDesk({
         </p>
         {stalled && opponent === "agent" ? (
           <p className="last-move">
-            Your assistant only plays while it is answering you. Tell it you have moved.
+            The assistant has stopped answering. A message in the chat brings it back.
           </p>
         ) : theirLast ? (
           <p className="last-move" key={theirLast.index}>
@@ -419,6 +413,9 @@ export function PlayDesk({
         <p className="note idle-note">
           This is the opening position. Press Start match, or ask the agent to deal one.
         </p>
+      ) : null}
+      {match && yourTurn && !sending ? (
+        <p className="note idle-note">Just play. You do not need to say you have moved.</p>
       ) : null}
 
       {match && (

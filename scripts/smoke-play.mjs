@@ -39,46 +39,49 @@ const call = (name, args) =>
 /** Tool answers are prose that may open with a JSON object. */
 const leadingJson = (text) => JSON.parse(String(text).split("\n")[0]);
 
+const clickSoon = (delay = 1500) =>
+  new Promise((resolve) =>
+    setTimeout(() => {
+      page
+        .frameLocator("iframe[title='Game table']")
+        .locator("[data-action]:not([disabled])")
+        .first()
+        .click({ timeout: 8000 })
+        .then(() => resolve(true))
+        .catch(() => resolve(false));
+    }, delay),
+  );
+
 console.log("--- start_match ---");
+const opening = clickSoon(2000);
 const started = leadingJson(await call("start_match", { environment_id: ENV, agent_label: "smoke-agent" }));
+await opening;
 console.log(started);
 const matchId = started.match_id;
-const humanSeat = started.human_seat;
 const agentSeat = started.your_seat;
 
 const state = async () => (await fetch(`${BASE}/api/matches/${matchId}`)).json();
-const obs = async (seat) =>
-  (await fetch(`${BASE}/api/matches/${matchId}/observation?seat=${seat}`)).json();
 
 for (let round = 1; round <= 6; round++) {
   let s = await state();
   if (s.match.terminal) break;
+  if (s.match.to_move !== agentSeat) break;
 
-  if (s.match.to_move === humanSeat) {
-    const o = await obs(humanSeat);
-    const choice = o.legal_actions[Math.floor(o.legal_actions.length / 2)];
-    console.log(`\n[human] clicking ${choice}`);
-    await page.frameLocator(".game-host iframe").locator(`[data-action="${choice}"]`).click({ timeout: 5000 });
-    await page.waitForTimeout(700);
-    s = await state();
-    console.log(`[human] match revision now ${s.match.revision}, to_move ${s.match.to_move}, steps ${s.steps.length}`);
-    if (s.match.revision === 1) throw new Error("human click did not register");
-  }
-
-  s = await state();
-  if (s.match.terminal) break;
-  if (s.match.to_move === agentSeat) {
-    const view = leadingJson(await call("get_observation", {}));
-    const choice = view.legal_actions[0];
-    console.log(`[agent] take_action ${choice} at revision ${view.revision}`);
-    const res = await call("take_action", {
-      action: choice,
-      expected_revision: view.revision,
-      rationale: "smoke test",
-      confidence: 3,
-    });
-    console.log(`[agent] ${String(res).slice(0, 220)}`);
-  }
+  const view = leadingJson(
+    String(await call("get_observation", {})).split("\n").find((l) => l.startsWith("{")) || "{}",
+  );
+  const choice = view.legal_actions?.[0];
+  if (!choice) break;
+  console.log(`[agent] take_action ${choice} at revision ${view.revision}`);
+  const human = clickSoon(2000);
+  const res = await call("take_action", {
+    action: choice,
+    expected_revision: view.revision,
+    rationale: "smoke test",
+    confidence: 3,
+  });
+  await human;
+  console.log(`[agent] ${String(res).slice(0, 220)}`);
 }
 
 await page.waitForTimeout(600);

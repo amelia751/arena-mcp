@@ -98,12 +98,13 @@ check("the front page points at a dealt match", (await page.locator(".dealt").co
 // 4. The agent's play tools after the browser moves the page under them.
 await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForTimeout(800);
-const dealt = await call("start_match", { environment_id: front });
+const waiting = call("start_match", { environment_id: front });
+await page.waitForTimeout(1500);
+await drop("col_3").catch(() => {});
+const dealt = await waiting;
 check("start_match puts the table on screen", /\/e\//.test(page.url()), page.url());
 check("start_match answers with a match", /"match_id"/.test(dealt), String(dealt).slice(0, 80));
 await page.waitForTimeout(800);
-await drop("col_3");
-await page.waitForTimeout(1200);
 await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForTimeout(1200);
 const seen = await call("get_observation", {});

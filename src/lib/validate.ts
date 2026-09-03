@@ -81,6 +81,16 @@ export async function validateEnvironment(
 ): Promise<ValidationReport> {
   const players = opts?.players ?? 2;
   const episodes = opts?.episodes ?? (opts?.publish ? 1000 : 300);
+  /*
+   * How long the playout sweep may run for.
+   *
+   * Publishing is a deliberate act and the caller expects to wait for it. Saving
+   * a draft is not: an expensive game could spend twenty seconds here, long
+   * enough for the assistant to give up on the call, decide the save had failed
+   * and write the game a second time. A draft gets a quick look instead, and the
+   * report says when it was cut short.
+   */
+  const sweepBudget = opts?.publish ? 20000 : 4000;
   const checks: CheckResult[] = [];
   const failures: string[] = [];
   let info_flow: InfoFlowRow[] = [];
@@ -265,7 +275,7 @@ export async function validateEnvironment(
         let ran = probeN;
         let trimmedForTime = false;
         if (!sweep.error) {
-          const affordable = Math.max(probeN, Math.floor(20000 / Math.max(perEpisode, 0.01)));
+          const affordable = Math.max(probeN, Math.floor(sweepBudget / Math.max(perEpisode, 0.01)));
           ran = Math.min(episodes, affordable);
           trimmedForTime = ran < episodes;
           if (ran > probeN) sweep = runSweep(ran);

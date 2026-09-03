@@ -15,6 +15,23 @@ function mergeCode(base: EnvCode, patch?: EnvCodePatch): EnvCode {
   return next;
 }
 
+/** How long after writing a game the same game arriving again counts as a repeat. */
+const REPEAT_WINDOW = 5 * 60 * 1000;
+
+async function recentTwin(name: string, hash: string): Promise<Environment | null> {
+  const cutoff = Date.now() - REPEAT_WINDOW;
+  const rows = await listEnvironments();
+  return (
+    rows.find(
+      (env) =>
+        env.name === name &&
+        env.code_hash === hash &&
+        !env.published &&
+        Date.parse(env.created_at) >= cutoff,
+    ) ?? null
+  );
+}
+
 function publicEnv(env: Environment) {
   return {
     id: env.id,
@@ -181,11 +198,21 @@ export async function createEnv(input: {
   if (!input.name?.trim()) return { error: "name is required", status: 400 as const };
   const code = mergeCode(EMPTY_CODE, input.code);
   const players = input.players ?? 2;
+  const name = input.name.trim();
+
+  /*
+   * A save that takes a while can look to the caller like a save that failed,
+   * and the natural response is to send it again. Two identical games a moment
+   * apart is that, not somebody wanting two — hand back the one already written.
+   */
+  const twin = await recentTwin(name, codeHash(code));
+  if (twin) return { environment: { ...publicEnv(twin), code: twin.code } };
+
   const validation = await safeValidate(code, players, false);
   const t = now();
   const env: Environment = {
     id: nid("env"),
-    name: input.name.trim(),
+    name,
     description: input.description?.trim() || "",
     players,
     code,

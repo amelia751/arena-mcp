@@ -1,24 +1,31 @@
 import { json } from "@/lib/http";
 
-/** Temporary: checks whether a conditional write is honoured from inside a function. */
-export async function GET() {
+/** Temporary: how many writers can win the same version tag at once? */
+export async function GET(req: Request) {
+  const racers = Number(new URL(req.url).searchParams.get("n") ?? 8);
   const { getStore } = await import("@netlify/blobs");
   const store = getStore({ name: "cas-probe", consistency: "strong" });
   const KEY = "probe.json";
 
   await store.setJSON(KEY, { round: 0 });
   const first = await store.getWithMetadata(KEY, { type: "text" });
-  const stale = first?.etag;
+  const shared = first?.etag as string;
 
-  const a = await store.setJSON(KEY, { round: 1 }, { onlyIfMatch: stale as string });
-  const b = await store.setJSON(KEY, { round: 2 }, { onlyIfMatch: stale as string });
-  const after = (await store.get(KEY, { type: "json" })) as { round: number };
+  // Every one of these claims the same tag. Exactly one should be allowed.
+  const results = await Promise.all(
+    Array.from({ length: racers }, (_, i) =>
+      store
+        .setJSON(KEY, { round: i + 1 }, { onlyIfMatch: shared })
+        .then((r) => r.modified)
+        .catch(() => "threw"),
+    ),
+  );
 
+  const winners = results.filter((r) => r === true).length;
   return json({
-    etag_present: Boolean(stale),
-    current_tag_modified: a.modified,
-    stale_tag_modified: b.modified,
-    value_left: after?.round,
-    enforced: a.modified === true && b.modified === false && after?.round === 1,
+    racers,
+    winners,
+    atomic: winners === 1,
+    results,
   });
 }

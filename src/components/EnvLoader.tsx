@@ -10,10 +10,17 @@ import type { EnvTab } from "./EnvTabs";
 import type { Environment } from "@/lib/types";
 import { registerLive } from "@/lib/live";
 
+/**
+ * Null means this game is genuinely not here. Anything else — the store not
+ * answering, a bad connection — throws, because saying "not here" about a game
+ * that exists is worse than waiting a moment longer.
+ */
 async function loadEnv(id: string): Promise<Environment | null> {
   const res = await fetch(`/api/environments/${id}`, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`the store did not answer (${res.status})`);
   const body = (await res.json()) as Environment & { error?: string };
-  if (!res.ok || body.error || !body.id) return null;
+  if (!body.id) throw new Error(body.error || "no game came back");
   return body;
 }
 
@@ -23,20 +30,28 @@ function useEnv(id: string) {
 
   useEffect(() => {
     let stale = false;
+    let retry: ReturnType<typeof setTimeout>;
     const draw = async () => {
-      const next = await loadEnv(id);
-      if (stale) return;
-      if (!next) {
-        setMissing(true);
-        return;
+      try {
+        const next = await loadEnv(id);
+        if (stale) return;
+        if (!next) {
+          setMissing(true);
+          return;
+        }
+        setMissing(false);
+        setEnv(next);
+      } catch {
+        // The store went quiet. Keep whatever is on screen — an empty table is
+        // better than a wrong answer — and come back for it shortly.
+        if (!stale) retry = setTimeout(() => void draw(), 1500);
       }
-      setMissing(false);
-      setEnv(next);
     };
     const stop = registerLive(draw);
     void draw();
     return () => {
       stale = true;
+      clearTimeout(retry);
       stop();
     };
   }, [id]);

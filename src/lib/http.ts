@@ -26,6 +26,22 @@ export async function fromWrite(work: () => Promise<unknown>) {
   }
 }
 
+/**
+ * A read that could not reach the store is not a missing page.
+ *
+ * Answering 404 would have the page tell somebody their game does not exist,
+ * which is the one thing that is never true here — the game is on disk, we just
+ * could not get to it. 503 says come back in a moment.
+ */
+export async function fromRead(work: () => Promise<unknown>) {
+  try {
+    return fromResult(await work());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "the store did not answer";
+    return json({ error: message, status: 503 }, 503);
+  }
+}
+
 export async function readBody<T>(req: Request): Promise<T> {
   try {
     return (await req.json()) as T;

@@ -55,17 +55,25 @@ type BlobStore = {
   delete: (key: string) => Promise<void>;
   list: (options: { prefix: string }) => Promise<{ blobs: { key: string }[] }>;
 };
-let blobStore: BlobStore | null = null;
+type MakeStore = (opts: { name: string; consistency: string }) => unknown;
+let makeStore: MakeStore | null = null;
 
+/**
+ * Build the client fresh every time.
+ *
+ * The host hands each invocation its own short-lived credentials, and a client
+ * keeps whichever ones it was built with. Holding one across invocations means
+ * holding a token past its expiry, and after that every read fails with
+ * "Token expired" — the games are all still there, the page just cannot see
+ * them. Building a client reads the current credentials and makes no network
+ * call, so there is nothing to save by keeping it.
+ */
 async function blobs(): Promise<BlobStore | null> {
   if (!SERVERLESS) return null;
-  if (blobStore) return blobStore;
   try {
-    const { getStore } = await import("@netlify/blobs");
-    blobStore = getStore({ name: "arena", consistency: "strong" }) as unknown as BlobStore;
-    return blobStore;
+    makeStore ??= (await import("@netlify/blobs")).getStore as MakeStore;
+    return makeStore({ name: "arena", consistency: "strong" }) as BlobStore;
   } catch {
-    // Do not cache a failed init — the next request may have the context.
     return null;
   }
 }
@@ -81,12 +89,18 @@ function complain(err: unknown) {
   console.error(`arena store: ${err instanceof Error ? err.message : String(err)}`);
 }
 
-async function readKey<T>(key: string): Promise<T | null> {
+/** Throws when the store did not answer. Null only when the key is not there. */
+async function fetchKey<T>(key: string): Promise<T | null> {
   const store = await blobs();
-  if (!store) return null;
+  if (!store) throw new Error(UNREACHABLE);
+  const raw = await store.get(key, { type: "text" });
+  return raw ? (JSON.parse(raw) as T) : null;
+}
+
+/** The forgiving version: null whether it is missing or the store went quiet. */
+async function readKey<T>(key: string): Promise<T | null> {
   try {
-    const raw = await store.get(key, { type: "text" });
-    return raw ? (JSON.parse(raw) as T) : null;
+    return await fetchKey<T>(key);
   } catch (err) {
     complain(err);
     return null;
@@ -100,16 +114,20 @@ async function writeKey(key: string, value: unknown): Promise<void> {
   await store.setJSON(key, value);
 }
 
-async function readAll<T>(prefix: string): Promise<T[]> {
+/** Null means the store did not answer, which is not the same as nothing here. */
+async function readAll<T>(prefix: string): Promise<T[] | null> {
   const store = await blobs();
-  if (!store) return [];
+  if (!store) return null;
   try {
     const { blobs: found } = await store.list({ prefix });
-    const rows: (T | null)[] = await Promise.all(found.map((b) => readKey<T>(b.key)));
+    // fetchKey throws rather than returning null, so one unreadable game fails
+    // the whole list. A game we could not read is not a game that is gone, and
+    // half a shelf is worse than the shelf we had a moment ago.
+    const rows: (T | null)[] = await Promise.all(found.map((b) => fetchKey<T>(b.key)));
     return rows.filter((row): row is T => row !== null);
   } catch (err) {
     complain(err);
-    return [];
+    return null;
   }
 }
 
@@ -156,12 +174,11 @@ async function listCached<T>(prefix: string): Promise<T[]> {
     pending = migrate()
       .then(() => readAll<T>(prefix))
       .then((rows) => {
-        // Do not cache an empty result — a cold blob store returning nothing
-        // should not block the next caller from trying again immediately.
-        if (rows.length > 0) {
-          cache.set(prefix, { at: Date.now(), rows });
-        }
-        return rows as unknown[];
+        // Remember only an answer the store actually gave. A store that really
+        // is empty is worth caching; a store that would not answer is not, and
+        // until it does, the shelf we had a moment ago beats a blank page.
+        if (rows) cache.set(prefix, { at: Date.now(), rows });
+        return (rows ?? hit?.rows ?? []) as unknown[];
       })
       .finally(() => inFlight.delete(prefix));
     inFlight.set(prefix, pending);
@@ -241,7 +258,9 @@ export async function listEnvironments(): Promise<Environment[]> {
 export async function getEnvironment(id: string): Promise<Environment | null> {
   if (SERVERLESS) {
     await migrate();
-    const row = await readKey<Environment>(ENV + id);
+    // Throws rather than answering "no such game" when the store is quiet.
+    // Telling somebody their game does not exist is the one wrong answer here.
+    const row = await fetchKey<Environment>(ENV + id);
     if (row) row.kind = "authored";
     return row;
   }

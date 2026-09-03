@@ -1,5 +1,5 @@
 import { getEnv, updateEnv } from "@/lib/env-service";
-import { fromResult, fromWrite, readBody } from "@/lib/http";
+import { fromRead, fromWrite, readBody } from "@/lib/http";
 import type { EnvCode } from "@/lib/types";
 
 export async function GET(
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const fn = new URL(req.url).searchParams.get("fn") as keyof EnvCode | null;
-  return fromResult(await getEnv(id, fn ?? undefined));
+  return fromRead(() => getEnv(id, fn ?? undefined));
 }
 
 export async function PATCH(

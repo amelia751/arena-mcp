@@ -36,17 +36,17 @@ type BlobStore = {
   get: (key: string) => Promise<string | null>;
   setJSON: (key: string, value: unknown) => Promise<unknown>;
 };
-let blobStore: BlobStore | null = null;
+type MakeStore = (opts: { name: string; consistency: string }) => unknown;
+let makeStore: MakeStore | null = null;
 
+/** Built fresh each time, for the same reason as the store: tokens expire. */
 async function blobs(): Promise<BlobStore | null> {
   if (!SERVERLESS) return null;
-  if (blobStore) return blobStore;
   try {
-    const { getStore } = await import("@netlify/blobs");
+    makeStore ??= (await import("@netlify/blobs")).getStore as MakeStore;
     // Its own store. The recorder rewrites its whole log on every entry, and it
     // must never be the reason a game fails to save.
-    blobStore = getStore({ name: "arena-trace", consistency: "strong" }) as BlobStore;
-    return blobStore;
+    return makeStore({ name: "arena-trace", consistency: "strong" }) as BlobStore;
   } catch {
     return null;
   }

@@ -10,6 +10,8 @@ export const control = {
   failWrites: false,
   reads: 0,
   writes: 0,
+  /** How many clients were built. The real one carries a token that expires. */
+  built: 0,
   /** Runs once after the next read, standing in for another instance writing. */
   afterNextRead: null,
   seed(key, value) {
@@ -33,6 +35,7 @@ export const control = {
 };
 
 export function getStore() {
+  control.built += 1;
   return {
     async get(key) {
       control.reads += 1;

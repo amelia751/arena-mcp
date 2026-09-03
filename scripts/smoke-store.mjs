@@ -132,5 +132,45 @@ await Promise.all([
 const spent = control.reads - before;
 check("four simultaneous polls share one trip", spent <= 2, `used ${spent} reads`);
 
+// ── The client must not be kept across calls ─────────────────────────────────
+// The host hands each invocation a short-lived token and the client holds the
+// one it was built with. Reusing a client means using a token past its expiry,
+// after which every read fails and the page looks empty.
+control.reset();
+await store.putEnvironment(env("a"));
+await settle();
+const built = control.built;
+await store.putEnvironment(env("b"));
+await settle();
+await store.listEnvironments();
+check("a fresh client is built each time", control.built > built, `${control.built - built} built`);
+
+// ── An outage must not look like an empty shelf ──────────────────────────────
+control.reset();
+await store.putEnvironment(env("a"));
+await store.putEnvironment(env("b"));
+await settle();
+await store.listEnvironments(); // the last good answer
+control.failReads = true;
+await settle(); // and let it go stale
+const during = await store.listEnvironments();
+check("an outage still shows the games we had", during.length === 2, `showed ${during.length}`);
+
+// ── An outage must not claim a game is gone ──────────────────────────────────
+let denied = null;
+try {
+  await store.getEnvironment("a");
+} catch (err) {
+  denied = err;
+}
+check("an outage does not say the game is missing", denied !== null, denied ? "" : "it said no such game");
+control.failReads = false;
+
+// ── A store that really is empty says so ─────────────────────────────────────
+control.reset();
+await settle();
+const none = await store.listEnvironments();
+check("an empty store reads as empty", none.length === 0, `${none.length} games`);
+
 console.log(failures ? `\n${failures} failed` : "\nstore holds up");
 process.exit(failures ? 1 : 0);

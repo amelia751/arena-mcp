@@ -747,7 +747,7 @@ export function ArenaTools() {
         name: "take_action",
         title: "Play a move",
         description:
-          "Play one legal action in the match on screen. Quote expected_revision from your last observation. A rationale and a 1–5 confidence are recorded on the trajectory if you give them.",
+          "Play one legal action in the match on screen. Quote expected_revision from your last observation. Say why you picked it and how sure you are: both land on the trajectory beside the move, and they are the part of the record a person clicking a board cannot leave behind.",
         inputSchema: {
           type: "object",
           properties: {
@@ -771,7 +771,7 @@ export function ArenaTools() {
               description: "How sure you are, 1 to 5. Recorded alongside the move.",
             },
           },
-          required: ["action", "expected_revision"],
+          required: ["action", "expected_revision", "rationale", "confidence"],
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
@@ -799,6 +799,10 @@ export function ArenaTools() {
             seat: session?.agent_seat,
           };
           handOver();
+          // A row with no reasoning is the one thing a human click already gives
+          // us. Say so rather than letting the dataset quietly lose the half
+          // that only an agent can write.
+          const thin = rest.rationale ? "" : "\nThat move was recorded without a rationale, so its row reads like a click. Give one on the next move.";
           return `${clip(
             {
               ok: true,
@@ -812,7 +816,7 @@ export function ArenaTools() {
               legal_actions: res.observation?.legal_actions,
             },
             2000,
-          )}\n${nextStep(after)}`;
+          )}${thin}\n${nextStep(after)}`;
         },
       },
       {

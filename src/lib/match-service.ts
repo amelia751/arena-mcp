@@ -9,6 +9,7 @@ import {
   putMatch,
   replaceMatchAndStep,
 } from "./store";
+import { trace } from "./trace";
 import { withRealm } from "./sandbox";
 import { validateEnv } from "./env-service";
 import { fallbackView, parseRender, sanitizeView, type AuthoredView } from "./view";
@@ -87,6 +88,14 @@ export async function startMatch(input: {
     ended_at: null,
   };
   await putMatch(match);
+  trace("match_started", {
+    match_id: match.id,
+    environment_id: env.id,
+    environment_name: env.name,
+    human_seat: humanSeat,
+    agent_label: input.agent_label,
+    to_move: match.to_move,
+  });
   const view = await observationFor(match, humanSeat);
   return { match: publicMatch(match), observation: view };
 }
@@ -205,6 +214,16 @@ export async function takeAction(input: {
       confidence: input.confidence ?? null,
     };
     await replaceMatchAndStep(next, record);
+    trace("move", {
+      match_id: match.id,
+      seat,
+      action: input.action,
+      by: record.interface,
+      revision: next.revision,
+      terminal: next.terminal,
+      rewards: next.terminal ? next.rewards : undefined,
+      latency_ms: record.latency_ms,
+    });
     const view = await observationFor(next, seat);
     return { match: publicMatch(next), step: record, observation: view };
   } catch (e) {

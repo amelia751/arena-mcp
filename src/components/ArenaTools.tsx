@@ -13,8 +13,48 @@ import {
   waitForDesk,
 } from "@/lib/session";
 
-/** What the browser hands execute(): an abort signal that fires if the call is cancelled. */
-type ToolRun = { signal?: AbortSignal };
+/**
+ * What the browser hands execute(): an abort signal that fires if the call is
+ * cancelled, and — where the browser implements it — a way to hand control back
+ * to the person for the length of an inner promise.
+ */
+type ToolRun = {
+  signal?: AbortSignal;
+  requestUserInteraction?: (fn: () => Promise<unknown>) => Promise<unknown>;
+};
+
+/** Short enough to read a whole session at a glance, long enough to place it. */
+function brief(input: unknown): string {
+  if (input == null || typeof input !== "object") return String(input ?? "");
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (v == null) continue;
+    if (typeof v === "object") {
+      parts.push(`${k}=${Array.isArray(v) ? `[${v.length}]` : `{${Object.keys(v).join(",")}}`}`);
+    } else {
+      const s = String(v);
+      parts.push(`${k}=${s.length > 40 ? `${s.slice(0, 40)}…` : s}`);
+    }
+  }
+  return parts.join(" ").slice(0, 300);
+}
+
+/**
+ * Most of this runs in a browser we cannot open. Reporting each call means a
+ * session can be read back later instead of described from memory.
+ */
+function report(fields: Record<string, unknown>) {
+  try {
+    void fetch("/api/trace", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(fields),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* diagnostics must never break a tool call */
+  }
+}
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, {
@@ -823,7 +863,7 @@ export function ArenaTools() {
         name: "wait_for_turn",
         title: "Wait for the person to move",
         description:
-          "Hold until it is your turn, up to 8 seconds, then return the position. Returns at once if the board is already yours. Returns still_waiting while the person is still thinking, which means call it again.",
+          "Hold until the person has moved and it is your turn again, then return the position. This is a long wait on purpose — it can take a minute, because a person is thinking. Stay in the call; do not end your turn and ask them to tell you when they have moved.",
         inputSchema: {
           type: "object",
           properties: {
@@ -834,23 +874,60 @@ export function ArenaTools() {
             },
             timeout_ms: {
               type: "integer",
-              description: "How long to hold before answering, up to 8000ms.",
+              description: "How long to hold before giving up, up to 110000ms. Defaults to a minute.",
             },
           },
           additionalProperties: false,
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async ({ match_id, after_revision, timeout_ms }, { signal }) => {
+        execute: async ({ match_id, after_revision, timeout_ms }, run) => {
+          const { signal } = run;
           const session = await currentMatch(match_id ? String(match_id) : undefined);
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
           const after = after_revision ?? session?.revision ?? 0;
           const q = new URLSearchParams({ after_revision: String(after) });
           if (session?.agent_seat != null) q.set("seat", String(session.agent_seat));
-          if (timeout_ms != null) q.set("timeout_ms", String(timeout_ms));
-          const res = await api(`/api/matches/${id}/wait?${q}`, { signal });
-          if (res.status === "still_waiting") {
-            return `still_waiting — it is their move and they have not played yet (revision ${after}). Call wait_for_turn again; do not stop and wait for a message.`;
+
+          /**
+           * The page cannot wake a chat that has stopped talking, so the only
+           * moment the agent can notice a move is while it is still inside a
+           * call. The server can only hold a request for a few seconds before
+           * the platform cuts it, so the waiting lives here: short server waits,
+           * stitched together, with the promise left pending the whole time.
+           */
+          const budget = Math.min(Math.max(Number(timeout_ms) || 60000, 1000), 110000);
+          const until = Date.now() + budget;
+          const hold = async () => {
+            let res = null;
+            while (Date.now() < until) {
+              if (signal?.aborted) return null;
+              const slice = Math.min(8000, Math.max(1000, until - Date.now()));
+              res = await api(`/api/matches/${id}/wait?${q}&timeout_ms=${slice}`, { signal });
+              if (res?.error || res?.status === "ready") return res;
+            }
+            return res;
+          };
+          // Handing control to the person is exactly what this tool is for, so
+          // say so when the browser offers a way to say it.
+          const ask = run.requestUserInteraction;
+          type Waited = {
+            status?: string;
+            error?: string;
+            observation?: {
+              revision?: number;
+              to_move?: number;
+              terminal?: boolean;
+              rewards?: number[];
+              observation?: unknown;
+              legal_actions?: string[];
+            };
+          } | null;
+          const res = (await (typeof ask === "function" ? ask(hold) : hold())) as Waited;
+
+          if (res?.error) return clip(res);
+          if (!res || res.status !== "ready") {
+            return `still_waiting — they have not moved in ${Math.round(budget / 1000)}s (revision ${after}). Call wait_for_turn again to keep holding. Only stop if you also tell them the board is waiting on them and that you need a message to come back.`;
           }
           await currentDesk()?.refresh();
           const o = res.observation;
@@ -930,16 +1007,27 @@ export function ArenaTools() {
             // agent cancels mid-call. Work that outlives the call it belongs to is
             // work nobody is waiting for, so it is threaded into every request.
             execute: async (input, run) => {
-              const ctx: ToolRun = { signal: run?.signal };
+              const ctx = (run ?? {}) as ToolRun;
               if (ctx.signal?.aborted) return "cancelled before it ran.";
+              const began = Date.now();
+              let out: string;
               try {
-                return await tool.execute(input ?? {}, ctx);
+                out = await tool.execute(input ?? {}, ctx);
               } catch (e) {
-                if (ctx.signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
-                  return "cancelled.";
-                }
-                return `error: ${e instanceof Error ? e.message : String(e)}`;
+                out =
+                  ctx.signal?.aborted || (e instanceof Error && e.name === "AbortError")
+                    ? "cancelled."
+                    : `error: ${e instanceof Error ? e.message : String(e)}`;
               }
+              report({
+                event: "tool",
+                name: tool.name,
+                ms: Date.now() - began,
+                args: brief(input),
+                answer: String(out).replace(/\s+/g, " ").slice(0, 300),
+                path: location.pathname,
+              });
+              return out;
             },
           },
           { signal },
@@ -948,6 +1036,13 @@ export function ArenaTools() {
           // Strict Mode remounts; a duplicate name is expected and ignored.
         });
     }
+
+    report({
+      event: "tools_registered",
+      count: tools.length,
+      path: location.pathname,
+      agent: navigator.userAgent.slice(0, 200),
+    });
 
     return () => controller.abort();
   }, []);

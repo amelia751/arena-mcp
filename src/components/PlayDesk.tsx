@@ -283,6 +283,18 @@ export function PlayDesk({
 
   const yourTurn = !!match && !match.terminal && match.to_move === humanSeat;
   const theirTurn = !!match && !match.terminal && match.to_move !== humanSeat;
+
+  // An assistant only plays while it is answering. If it has finished its reply,
+  // nothing on this page can reach it, and saying "thinking" forever is a lie
+  // that leaves the person waiting on something that is never coming.
+  const [stalledAt, setStalledAt] = useState<number | null>(null);
+  const nowRevision = match?.revision ?? -1;
+  useEffect(() => {
+    if (!theirTurn || opponent !== "agent") return;
+    const t = setTimeout(() => setStalledAt(nowRevision), 30000);
+    return () => clearTimeout(t);
+  }, [theirTurn, opponent, nowRevision]);
+  const stalled = theirTurn && opponent === "agent" && stalledAt === nowRevision;
   const agentSeat = 1 - humanSeat;
   const them = opponent === "agent" ? "Agent" : "Bot";
   const score = match?.terminal ? match.rewards : null;
@@ -362,8 +374,10 @@ export function PlayDesk({
                 ? "Placing your move"
                 : yourTurn
                   ? "Your turn"
-                  : `${them} is thinking`}
-          {theirTurn || sending ? (
+                  : stalled
+                    ? `Waiting on the ${them.toLowerCase()}`
+                    : `${them} is thinking`}
+          {(theirTurn && !stalled) || sending ? (
             <span className="dots" aria-hidden="true">
               <i />
               <i />
@@ -371,7 +385,11 @@ export function PlayDesk({
             </span>
           ) : null}
         </p>
-        {theirLast ? (
+        {stalled && opponent === "agent" ? (
+          <p className="last-move">
+            Your assistant only plays while it is answering you. Tell it you have moved.
+          </p>
+        ) : theirLast ? (
           <p className="last-move" key={theirLast.index}>
             {playerName(theirLast.seat)} played <b>{theirLast.action}</b>
           </p>

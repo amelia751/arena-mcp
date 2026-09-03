@@ -6,7 +6,7 @@ agent, and keep the match as reinforcement-learning trajectories.
 The human uses the board. An agent on the same page uses tools registered on
 `document.modelContext`. Both write into one dataset.
 
-![A person and an agent share one page. The agent authors five environment functions that run in a sandbox, validation gates publishing, and both sides write one trajectory dataset.](docs/architecture.jpg)
+![A person and an agent share one page. The agent authors five environment functions that run in a sandbox, validation gates publishing, and both sides write one trajectory dataset.](docs/architecture.png)
 
 ## Run
 
@@ -21,6 +21,60 @@ worked example, no catalogue to copy from. The contract is the ordinary one, clo
 OpenSpiel or PettingZoo that a model can write against it from what it already knows, so what
 lands on the page is authored rather than assembled. Nothing ships with it: the page starts
 empty, and every game on it was written there.
+
+## Layout
+
+```
+.
+├── README.md
+├── package.json
+├── netlify.toml              deploy config + the Next runtime plugin
+├── next.config.ts
+├── arena_dataset.py          read exported episodes from Python
+│
+├── docs/
+│   ├── architecture.png      the figure above, drawn from /diagram
+│   └── webmcp.md             the API, the security model, browser support
+│
+├── src/app/
+│   ├── layout.tsx            mounts the tool surface on every page
+│   ├── page.tsx              the gallery
+│   ├── e/[id]/
+│   │   ├── page.tsx          Table — take a seat and play
+│   │   ├── inspect/          walk a deal, pin a seat
+│   │   └── data/             schema, sample row, who sees what
+│   ├── diagram/              problem/, solution/ — the appendix pages
+│   └── api/
+│       ├── environments/     create, fork, update, validate, publish,
+│       │                     view, trace, dataset
+│       ├── matches/          start, observe, act, wait, bot
+│       ├── episodes/         the tape as NDJSON
+│       ├── guide/            the authoring contract
+│       └── trace/            flight recorder for tool calls
+│
+├── src/components/
+│   ├── ArenaTools.tsx        registers 18 document.modelContext tools
+│   ├── PlayDesk.tsx          the table a person plays at
+│   ├── InspectDesk.tsx       step through a deal without playing it
+│   ├── DataPanel.tsx         what a recorded step actually holds
+│   └── GameView.tsx          authored html + css in a sandboxed iframe
+│
+├── src/lib/
+│   ├── sandbox.ts            quickjs-emscripten — pure, injected rng
+│   ├── validate.ts           V0–V8 and the playout sweep
+│   ├── store.ts              Netlify Blobs, one key per game, match, tape
+│   ├── match-service.ts      one step(), one revision, one tape
+│   ├── session.ts            the seat a person holds and an agent joins
+│   ├── view-*.ts             render, project and host the authored table
+│   └── guide.ts              what an author is told, and nothing beyond it
+│
+└── scripts/
+    ├── smoke-*.mjs           what npm run check:* runs
+    ├── agent-live.mjs        drive a model against the live tool surface
+    ├── audit-episodes.mjs    check a recorded tape against its schema
+    ├── diagram-png.mjs       redraw docs/architecture.png
+    └── purge.mjs             remove a game from the deployed store
+```
 
 ## The environment contract
 

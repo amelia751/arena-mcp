@@ -225,7 +225,7 @@ export function DiagramFigure() {
                 <Brand src="/diagram/netlify.svg" label="Netlify Blobs" />
               </header>
               <p>
-                store <code>arena</code> / <code>db.json</code> — environments · matches · steps
+                store <code>arena</code> — <code>env/</code> · <code>match/</code> · <code>steps/</code>, a key each
               </p>
             </div>
           </div>

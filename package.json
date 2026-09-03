@@ -17,7 +17,8 @@
     "check:webmcp": "node scripts/probe-webmcp.mjs",
     "agent": "node scripts/agent-live.mjs",
     "check:store": "node --import ./scripts/register-loader.mjs scripts/smoke-store.mjs",
-    "check:create": "node scripts/smoke-create.mjs"
+    "check:create": "node scripts/smoke-create.mjs",
+    "diagram": "node scripts/diagram-png.mjs"
   },
   "dependencies": {
     "@jitl/quickjs-singlefile-cjs-release-sync": "^0.32.0",

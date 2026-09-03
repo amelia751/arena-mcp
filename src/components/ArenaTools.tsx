@@ -49,8 +49,10 @@ function report(fields: Record<string, unknown>) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(fields),
-      keepalive: true,
-    }).catch(() => {});
+    }).then(
+      (r) => r.body?.cancel(),
+      () => undefined,
+    );
   } catch {
     /* diagnostics must never break a tool call */
   }
@@ -863,7 +865,7 @@ export function ArenaTools() {
         name: "wait_for_turn",
         title: "Wait for the person to move",
         description:
-          "Hold until the person has moved and it is your turn again, then return the position. This is a long wait on purpose — it can take a minute, because a person is thinking. Stay in the call; do not end your turn and ask them to tell you when they have moved.",
+          "Hold until the person has moved and it is your turn again, then return the position. The wait is long on purpose, because a person is thinking: it can take a minute. Stay in the call and the move arrives on its own.",
         inputSchema: {
           type: "object",
           properties: {
@@ -896,7 +898,7 @@ export function ArenaTools() {
            * the platform cuts it, so the waiting lives here: short server waits,
            * stitched together, with the promise left pending the whole time.
            */
-          const budget = Math.min(Math.max(Number(timeout_ms) || 60000, 1000), 110000);
+          const budget = Math.min(Math.max(Number(timeout_ms) || 50000, 1000), 110000);
           const until = Date.now() + budget;
           const hold = async () => {
             let res = null;

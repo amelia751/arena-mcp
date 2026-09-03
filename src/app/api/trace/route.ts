@@ -22,7 +22,9 @@ export async function POST(req: Request) {
     capped[k] = typeof v === "string" ? v.slice(0, 500) : v;
   }
   trace(String(event).slice(0, 60), capped);
-  return json({ ok: true });
+  // Nothing reads this answer, and an unread body is a connection the browser
+  // holds open. Say nothing at all.
+  return new Response(null, { status: 204 });
 }
 
 export async function DELETE() {

@@ -90,6 +90,19 @@ async function visibleControls() {
     .map((c) => ({ ...c, px: box.x + c.x, py: box.y + c.y }));
 }
 
+/**
+ * A board is swapped out whole each time it repaints, so an instant exists when
+ * there is nothing on screen. Nobody clicks in that instant — they look again.
+ */
+async function waitForControls(ms = 4000) {
+  const until = Date.now() + ms;
+  for (;;) {
+    const found = await visibleControls();
+    if (found.length || Date.now() > until) return found;
+    await page.waitForTimeout(200);
+  }
+}
+
 const first = await visibleControls();
 check("something is visibly clickable once the match is dealt", first.length > 0, `${first.length} controls`);
 check(
@@ -114,7 +127,7 @@ for (let turn = 0; turn < 30; turn++) {
     await page.waitForTimeout(900);
     continue;
   }
-  const controls = await visibleControls();
+  const controls = await waitForControls();
   if (!controls.length) {
     stuckAt = `turn ${turn}: it is my move and nothing is clickable`;
     break;

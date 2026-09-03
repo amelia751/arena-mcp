@@ -151,6 +151,7 @@ you cannot see any of it from the error message alone.
 5. When every check passes: describe_dataset, then preview_view once more on the revision you
    are about to ship — publish refuses a revision you have not looked at — then publish_environment.
 6. start_match puts the board on the person's screen with you in the other seat. Then
-   get_observation, take_action, wait_for_turn while they think, and inspect_view whenever you
+   get_observation, take_action — which stays open through their reply, so one call a turn plays
+   the whole game — wait_for_turn if you ever lose the thread, and inspect_view whenever you
    want to confirm the board shows what you think it shows.
 `;

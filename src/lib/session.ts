@@ -21,6 +21,8 @@ export type DeskApi = {
   environment_id: string;
   match: () => SessionMatch | null;
   start: (opts?: { seat?: number; agent_label?: string }) => Promise<SessionMatch>;
+  /** Sit down at a match somebody else dealt rather than dealing another one. */
+  join: (matchId: string) => Promise<SessionMatch | null>;
   refresh: () => Promise<SessionMatch | null>;
   setOpponent: (who: "agent" | "bot") => void;
 };

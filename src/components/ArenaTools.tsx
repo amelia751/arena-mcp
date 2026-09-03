@@ -301,6 +301,115 @@ export function ArenaTools() {
       };
     };
 
+    /**
+     * Sit inside the call until the board is the agent's again.
+     *
+     * The server can only hold a request for a few seconds before the platform
+     * cuts it, so the waiting happens here: short server waits stitched together
+     * with the promise left pending across all of them.
+     */
+    const holdForTurn = async (opts: {
+      id: string;
+      seat?: number;
+      afterRevision: number;
+      run?: ToolRun;
+      budgetMs?: number;
+    }) => {
+      const q = new URLSearchParams({ after_revision: String(opts.afterRevision) });
+      if (opts.seat != null) q.set("seat", String(opts.seat));
+      const budget = Math.min(Math.max(opts.budgetMs ?? 50000, 1000), 110000);
+      const until = Date.now() + budget;
+      const loop = async () => {
+        let last = null;
+        while (Date.now() < until) {
+          if (opts.run?.signal?.aborted) return null;
+          const slice = Math.min(8000, Math.max(1000, until - Date.now()));
+          last = await api(`/api/matches/${opts.id}/wait?${q}&timeout_ms=${slice}`, {
+            signal: opts.run?.signal,
+          });
+          if (last?.error || last?.status === "ready") return last;
+        }
+        return last;
+      };
+      // Handing control to the person is exactly what this is, so say so when
+      // the browser offers a way to say it.
+      const ask = opts.run?.requestUserInteraction;
+      const res = await (typeof ask === "function" ? ask(loop) : loop());
+      return { res: res as Awaited<ReturnType<typeof loop>>, budget };
+    };
+
+    /**
+     * Turn a position into an answer — and while it is still the person's move,
+     * keep the call open rather than answering.
+     *
+     * An assistant only runs while it is replying. The moment a play tool hands
+     * back a "your move" and the assistant says something friendly, the game is
+     * over for it: nothing on this page can reach it again until the person
+     * types. So a tool that would return "waiting on them" waits instead.
+     */
+    const settle = async (opts: {
+      id: string;
+      seat?: number;
+      run?: ToolRun;
+      observation: {
+        revision?: number;
+        to_move?: number;
+        terminal?: boolean;
+        rewards?: number[];
+        observation?: unknown;
+        legal_actions?: string[];
+      };
+      prefix?: string;
+    }) => {
+      let o = opts.observation;
+      let held = 0;
+      // Waiting on somebody whose board is not on screen is waiting for a click
+      // that cannot happen. Give the table a moment to mount, then say so.
+      const atTable = () => currentDesk()?.match()?.match_id === opts.id;
+      let reachable = true;
+      if (!o?.terminal && o?.to_move !== opts.seat) {
+        reachable = atTable();
+        const { res, budget } = await holdForTurn({
+          id: opts.id,
+          seat: opts.seat,
+          afterRevision: Number(o?.revision ?? 0),
+          run: opts.run,
+          budgetMs: reachable ? undefined : 8000,
+        });
+        held = budget;
+        if (res?.error) return `${opts.prefix ?? ""}${clip(res)}`;
+        if (res?.status === "ready" && res.observation) o = res.observation;
+      }
+      await currentDesk()?.refresh();
+      handOver();
+      const yourTurn = o?.to_move === opts.seat;
+      if (!o?.terminal && !yourTurn) {
+        if (!reachable && !atTable()) {
+          return `${opts.prefix ?? ""}It is their move, but this match is not on their screen, so there is no board for them to click. Ask them to open the table, then call wait_for_turn.`;
+        }
+        return `${opts.prefix ?? ""}still_waiting — they have not moved in ${Math.round(
+          held / 1000,
+        )}s (revision ${o?.revision}). Call wait_for_turn to keep holding. If you would rather stop, tell them the board is waiting on them and that a message brings you back.`;
+      }
+      return `${opts.prefix ?? ""}${clip(
+        {
+          revision: o?.revision,
+          to_move: o?.to_move,
+          your_turn: yourTurn,
+          terminal: o?.terminal,
+          rewards: o?.rewards,
+          observation: o?.observation,
+          legal_actions: o?.legal_actions,
+        },
+        2000,
+      )}\n${nextStep({
+        terminal: o?.terminal,
+        your_turn: yourTurn,
+        rewards: o?.rewards,
+        seat: opts.seat,
+      })}`;
+    };
+
     // Publishing is the claim that the table is good, and you cannot make that
     // claim about markup you never looked at. Records the revision last seen.
     const looked = new Map<string, number>();
@@ -695,7 +804,7 @@ export function ArenaTools() {
         name: "start_match",
         title: "Deal a match against the person",
         description:
-          "Deal a match on the person's screen and take a seat opposite them. Returns your observation and what they can see. The board they click is the board you are playing.",
+          "Deal a match on the person's screen and take a seat opposite them. If they move first, this stays open through their opening move and returns the position with you to play, so answer it with a move. Joins a match already on the table rather than dealing a second one.",
         inputSchema: {
           type: "object",
           properties: {
@@ -707,7 +816,7 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ environment_id, human_seat, agent_label }) => {
+        execute: async ({ environment_id, human_seat, agent_label }, run) => {
           const desk = await openEnvironment(String(environment_id));
           if (!desk) {
             const res = await api("/api/matches", {
@@ -717,28 +826,40 @@ export function ArenaTools() {
             return `${clip(res, 1800)}\nThe match is dealt but this page did not move to the table. Tell the person to open /e/${environment_id} — the board picks the match up on its own once they are there.`;
           }
           desk.setOpponent("agent");
-          const session = await desk.start({
-            seat: typeof human_seat === "number" ? human_seat : 0,
-            agent_label: agent_label ? String(agent_label) : undefined,
-          });
+
+          // Somebody may already be sitting at this table. Dealing a second
+          // match leaves two boards claiming the same game, and the person
+          // clicks one while the agent watches the other.
+          const open = (await api(`/api/matches?environment_id=${environment_id}`).catch(() => null))
+            ?.match;
+          let session = open?.id && !open.terminal ? await desk.join(String(open.id)) : null;
+          const joined = !!session;
+          if (!session) {
+            session = await desk.start({
+              seat: typeof human_seat === "number" ? human_seat : 0,
+              agent_label: agent_label ? String(agent_label) : undefined,
+            });
+          }
+          const seated = session!;
+
           const obs = await api(
-            `/api/matches/${session.match_id}/observation?seat=${session.agent_seat}`,
+            `/api/matches/${seated.match_id}/observation?seat=${seated.agent_seat}`,
           );
-          const yourTurn = obs.to_move === session.agent_seat;
-          handOver();
-          return `${clip(
-            {
-              match_id: session.match_id,
-              your_seat: session.agent_seat,
-              human_seat: session.human_seat,
-              revision: obs.revision,
-              to_move: obs.to_move,
-              your_turn: yourTurn,
-              observation: obs.observation,
-              legal_actions: obs.legal_actions,
-            },
-            2000,
-          )}\n${nextStep({ your_turn: yourTurn, seat: session.agent_seat })}`;
+          const head = {
+            match_id: seated.match_id,
+            your_seat: seated.agent_seat,
+            human_seat: seated.human_seat,
+            joined_a_match_already_on_the_table: joined || undefined,
+          };
+          // Their turn opens the game, and the only moment this page can reach
+          // the agent is while it is still inside a call — so the call stays
+          // open through their first move instead of handing back to the chat.
+          return `${clip(head, 600)}\n${await settle({
+            id: seated.match_id,
+            seat: seated.agent_seat,
+            run,
+            observation: obs,
+          })}`;
         },
       },
       {
@@ -789,7 +910,7 @@ export function ArenaTools() {
         name: "take_action",
         title: "Play a move",
         description:
-          "Play one legal action in the match on screen. Quote expected_revision from your last observation. Say why you picked it and how sure you are: both land on the trajectory beside the move, and they are the part of the record a person clicking a board cannot leave behind.",
+          "Play one legal action in the match on screen, then stay open through their reply and return the position with you to move again. One call per turn of yours is the whole game. Quote expected_revision from your last observation. Say why you picked it and how sure you are: both land on the trajectory beside the move, and they are the part of the record a person clicking a board cannot leave behind.",
         inputSchema: {
           type: "object",
           properties: {
@@ -817,7 +938,7 @@ export function ArenaTools() {
           additionalProperties: false,
         },
         annotations: { untrustedContentHint: true },
-        execute: async ({ match_id, ...rest }, { signal }) => {
+        execute: async ({ match_id, ...rest }, run) => {
           const session = await currentMatch(match_id ? String(match_id) : undefined);
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
@@ -829,36 +950,28 @@ export function ArenaTools() {
               interface: "webmcp",
               latency_ms: decided(),
             }),
-            signal,
+            signal: run.signal,
           });
           if (res.error) return clip(res);
           await currentDesk()?.refresh();
-          const m = res.match;
-          const after = {
-            terminal: m?.terminal,
-            your_turn: m?.to_move === session?.agent_seat,
-            rewards: m?.rewards,
-            seat: session?.agent_seat,
-          };
-          handOver();
           // A row with no reasoning is the one thing a human click already gives
           // us. Say so rather than letting the dataset quietly lose the half
           // that only an agent can write.
-          const thin = rest.rationale ? "" : "\nThat move was recorded without a rationale, so its row reads like a click. Give one on the next move.";
-          return `${clip(
-            {
-              ok: true,
-              played: rest.action,
-              revision: m?.revision,
-              to_move: m?.to_move,
-              terminal: m?.terminal,
-              rewards: m?.rewards,
-              your_turn: after.your_turn,
+          const thin = rest.rationale ? "" : "That move was recorded without a rationale, so its row reads like a click. Give one on the next move.\n";
+          return settle({
+            id: String(id),
+            seat: session?.agent_seat,
+            run,
+            observation: {
+              revision: res.match?.revision,
+              to_move: res.match?.to_move,
+              terminal: res.match?.terminal,
+              rewards: res.match?.rewards,
               observation: res.observation?.observation,
               legal_actions: res.observation?.legal_actions,
             },
-            2000,
-          )}${thin}\n${nextStep(after)}`;
+            prefix: `${JSON.stringify({ ok: true, played: rest.action })}\n${thin}`,
+          });
         },
       },
       {
@@ -883,75 +996,27 @@ export function ArenaTools() {
         },
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async ({ match_id, after_revision, timeout_ms }, run) => {
-          const { signal } = run;
           const session = await currentMatch(match_id ? String(match_id) : undefined);
           const id = match_id ?? session?.match_id;
           if (!id) return "No match is running. Call start_match first.";
           const after = after_revision ?? session?.revision ?? 0;
-          const q = new URLSearchParams({ after_revision: String(after) });
-          if (session?.agent_seat != null) q.set("seat", String(session.agent_seat));
-
-          /**
-           * The page cannot wake a chat that has stopped talking, so the only
-           * moment the agent can notice a move is while it is still inside a
-           * call. The server can only hold a request for a few seconds before
-           * the platform cuts it, so the waiting lives here: short server waits,
-           * stitched together, with the promise left pending the whole time.
-           */
-          const budget = Math.min(Math.max(Number(timeout_ms) || 50000, 1000), 110000);
-          const until = Date.now() + budget;
-          const hold = async () => {
-            let res = null;
-            while (Date.now() < until) {
-              if (signal?.aborted) return null;
-              const slice = Math.min(8000, Math.max(1000, until - Date.now()));
-              res = await api(`/api/matches/${id}/wait?${q}&timeout_ms=${slice}`, { signal });
-              if (res?.error || res?.status === "ready") return res;
-            }
-            return res;
-          };
-          // Handing control to the person is exactly what this tool is for, so
-          // say so when the browser offers a way to say it.
-          const ask = run.requestUserInteraction;
-          type Waited = {
-            status?: string;
-            error?: string;
-            observation?: {
-              revision?: number;
-              to_move?: number;
-              terminal?: boolean;
-              rewards?: number[];
-              observation?: unknown;
-              legal_actions?: string[];
-            };
-          } | null;
-          const res = (await (typeof ask === "function" ? ask(hold) : hold())) as Waited;
-
-          if (res?.error) return clip(res);
-          if (!res || res.status !== "ready") {
-            return `still_waiting — they have not moved in ${Math.round(budget / 1000)}s (revision ${after}). Call wait_for_turn again to keep holding. Only stop if you also tell them the board is waiting on them and that you need a message to come back.`;
-          }
-          await currentDesk()?.refresh();
-          const o = res.observation;
-          handOver();
-          return `${clip(
-            {
-              status: "ready",
-              revision: o?.revision,
-              to_move: o?.to_move,
-              your_turn: o?.to_move === session?.agent_seat,
-              terminal: o?.terminal,
-              rewards: o?.rewards,
-              observation: o?.observation,
-              legal_actions: o?.legal_actions,
-            },
-            2000,
-          )}\n${nextStep({
-            terminal: o?.terminal,
-            your_turn: o?.to_move === session?.agent_seat,
-            rewards: o?.rewards,
+          const { res } = await holdForTurn({
+            id: String(id),
             seat: session?.agent_seat,
-          })}`;
+            afterRevision: Number(after),
+            run,
+            budgetMs: Number(timeout_ms) || undefined,
+          });
+          if (res?.error) return clip(res);
+          if (res?.status !== "ready" || !res.observation) {
+            return `still_waiting — they have not moved yet (revision ${after}). Call wait_for_turn again to keep holding. If you would rather stop, tell them the board is waiting on them and that a message brings you back.`;
+          }
+          return settle({
+            id: String(id),
+            seat: session?.agent_seat,
+            run,
+            observation: res.observation,
+          });
         },
       },
       {

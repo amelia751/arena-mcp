@@ -100,7 +100,7 @@ and every seat can see its own deal without `undefined` in it.
 | `start_match` | Deal a match on that table and take the opposite seat |
 | `get_observation` | That seat's view and legal actions |
 | `take_action` | Play a legal action |
-| `wait_for_turn` | Hold the call open until the person has moved |
+| `wait_for_turn` | Rejoin a match by holding the call open until the person has moved |
 | `export_episodes` | What was recorded, plus a download link |
 
 The person and the agent share one page, so a tool that writes reloads the gallery from the live

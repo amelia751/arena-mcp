@@ -79,7 +79,7 @@ console.log(`   wait_for_turn answered after ${Math.round(took / 1000)}s\n`);
 
 check("the wait outlived the old eight second ceiling", took > 12000, `${Math.round(took / 1000)}s`);
 check("it held until the person actually moved", took >= SLOW - 2000, `${Math.round(took / 1000)}s vs ${SLOW / 1000}s`);
-check("it came back ready, not still_waiting", /"status":"ready"/.test(out), out.slice(0, 70));
+check("it came back ready, not still_waiting", !/still_waiting/.test(out), out.slice(0, 70));
 check("it returned the agent's turn", /"your_turn":true/.test(out), out.slice(0, 90));
 
 const rev = /"revision":(\d+)/.exec(out)?.[1];

@@ -182,6 +182,7 @@ export function PlayDesk({
       environment_id: environmentId,
       match: () => toSession(matchRef.current),
       start,
+      join: async (matchId: string) => toSession(await load(matchId)),
       refresh: async () => {
         const m = matchRef.current;
         if (!m) return null;

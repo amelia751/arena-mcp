@@ -90,7 +90,7 @@ export async function validateEnvironment(
    * and write the game a second time. A draft gets a quick look instead, and the
    * report says when it was cut short.
    */
-  const sweepBudget = opts?.publish ? 20000 : 4000;
+  const sweepBudget = opts?.publish ? 20000 : 2000;
   const checks: CheckResult[] = [];
   const failures: string[] = [];
   let info_flow: InfoFlowRow[] = [];
@@ -268,7 +268,10 @@ export async function validateEnvironment(
         // Price a few playouts before committing to the full sweep. An expensive
         // step() is not wrong, so it gets verified over fewer playouts rather than
         // stalling until the sandbox interrupts it.
-        const probeN = Math.min(40, episodes);
+        // The probe is paid before the budget gets a say, so on a draft it stays
+        // small — forty playouts of an expensive game is most of the wait on its
+        // own, whatever the budget says afterwards.
+        const probeN = Math.min(opts?.publish ? 40 : 6, episodes);
         const probeStart = performance.now();
         let sweep: Sweep = runSweep(probeN);
         const perEpisode = (performance.now() - probeStart) / probeN;

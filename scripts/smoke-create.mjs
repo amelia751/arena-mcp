@@ -49,10 +49,24 @@ const t0 = Date.now();
 const slow = await post("/api/environments", SLOW);
 const took = Date.now() - t0;
 check("an expensive game still saves", slow.status === 200 && Boolean(slow.body.environment?.id));
-check("and it does not take all day", took < 12000, `${(took / 1000).toFixed(1)}s`);
+check("and it does not take all day", took < 8000, `${(took / 1000).toFixed(1)}s`);
 
 const report = slow.body.environment?.validation;
-check("it was still checked", Array.isArray(report?.checks) && report.checks.length > 0);
+check("it was still checked", (report?.checks?.length ?? 0) >= 9, `${report?.checks?.length} checks`);
+
+// Being quick about a draft must not make publishing shallow: that is the one
+// that freezes the code, and it is allowed to take its time.
+const publishable = await post("/api/environments", {
+  ...CONNECT_FOUR,
+  name: `Publish Check ${Date.now()}`,
+});
+const pid = publishable.body.environment?.id;
+const published = await post(`/api/environments/${pid}/publish`, {
+  expected_revision: 1,
+  confirm_info_flow: true,
+});
+const playouts = published.body.environment?.validation?.playouts ?? published.body.validation?.playouts;
+check("publishing still runs the full sweep", (playouts?.n ?? 0) >= 1000, `${playouts?.n} playouts`);
 
 // Sending the identical draft again is a repeat, not a second game.
 const twin = {

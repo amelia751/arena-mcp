@@ -138,6 +138,37 @@ and every seat can see its own deal without `undefined` in it.
 
 ## Tools
 
+All eighteen are registered from one client component,
+[`src/components/ArenaTools.tsx`](https://github.com/amelia751/arena-mcp/blob/main/src/components/ArenaTools.tsx),
+which [`src/app/layout.tsx`](https://github.com/amelia751/arena-mcp/blob/main/src/app/layout.tsx#L34)
+mounts on every page so the surface is there wherever the person is. The
+[tool table](https://github.com/amelia751/arena-mcp/blob/main/src/components/ArenaTools.tsx#L418)
+holds one entry per tool and the
+[registration loop](https://github.com/amelia751/arena-mcp/blob/main/src/components/ArenaTools.tsx#L1065-L1077)
+hands each to the browser:
+
+```ts
+const model = document.modelContext ?? navigator.modelContext;
+
+model.registerTool(
+  {
+    name: "create_environment",
+    title: "Create a new game",
+    description:
+      "Create an environment. code may be partial — send the functions you have and build up. " +
+      "Validation runs immediately and comes back with the result.",
+    inputSchema: { /* ... */ },
+    annotations: { /* ... */ },
+    execute: async (input, run) => { /* ... */ },
+  },
+  { signal },
+);
+```
+
+The second argument carries an `AbortSignal`, which is the only way to withdraw a tool — there is
+no `unregisterTool()`. `src/lib/webmcp.d.ts` types the API, and `src/AGENTS.md` covers checking a
+tool is really exposed in Chrome rather than merely rendered.
+
 | Tool | What it does |
 | --- | --- |
 | `get_authoring_guide` | Contract, sandbox rules, HTML/CSS render rules, the preview loop |
